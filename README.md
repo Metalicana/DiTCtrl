@@ -29,6 +29,8 @@
 ## 📋 News
 - [2024.12.24] Release code and demo on CogVideoX-2B!
 - [2025.1.3] Release code of DiT attention map visualization.
+- [2025.2.27] This paper is accepted by CVPR 2025.
+- [2025.3.26] Arxiv-v2 is updated.
 
 ## 🔆Demo
 
@@ -273,7 +275,7 @@ The code is also provided, you can run this:
 - [x] Release paper on arxiv
 - [x] Release Code based on <a href='https://github.com/THUDM/CogVideo'>CogVideoX-2B</a>
 - [x] Visualization of attention maps
-- [ ] Benchmark metrics
+- [x] metrics and tsne visualization
 - [ ] Diffuser version of DiTCtrl on CogVideoX-2B
 
 
