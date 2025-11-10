@@ -27,6 +27,8 @@ from arguments import get_args
 from torchvision.transforms.functional import center_crop, resize
 from torchvision.transforms import InterpolationMode
 
+import pdb
+
 def read_from_cli():
     cnt = 0
     try:
@@ -288,6 +290,7 @@ def generate_conditioning_parts(prompts, model, num_samples, num_transition_bloc
             uc_total.append(base_uc_conditions[i])
         
         # If not the last prompt, add transition blocks
+        #TODO this is where transition happens
         if i < len(prompts) - 1:
             for j in range(num_transition_blocks):
                 weight_2 = (j + 1) / (num_transition_blocks + 1)
@@ -377,6 +380,7 @@ def get_base_prompt_indices_with_longer_mid(tile_indices, prompts_length, num_tr
     return base_indices
 
 def sampling_main(args, model_cls):
+    # Model loading logic
     if isinstance(model_cls, type):
         model = get_model(args, model_cls)
     else:
@@ -386,14 +390,16 @@ def sampling_main(args, model_cls):
         
     load_checkpoint(model, args)
     model.eval()
-
+    # Config
     rank, world_size = mpu.get_data_parallel_rank(), mpu.get_data_parallel_world_size()
     print("rank and world_size", rank, world_size)
 
+    #TODO Image size
     image_size = [480, 720]
 
     sample_func_single = model.sample_single
     sample_func_multi_prompt = model.sample_multi_prompt
+    #TODO Dimensions
     H, W, C, F = image_size[0], image_size[1], args.latent_channels, 8
     tile_size = args.sampling_num_frames
     overlap_size = args.overlap_size
@@ -426,6 +432,8 @@ def sampling_main(args, model_cls):
             batch_size = 1
 
             randn_noise_original = torch.randn(batch_size, *shape).to(torch.float32).to(device)
+            #TODO where we left off
+            
             randn_noise, tile_indices = process_noise_blocks(
                 randn_noise_original, 
                 len(prompts),
