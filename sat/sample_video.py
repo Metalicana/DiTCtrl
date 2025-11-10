@@ -270,7 +270,7 @@ def generate_conditioning_parts(prompts, model, num_samples, num_transition_bloc
     for prompt in prompts:
         current_batch = {'txt': prompt}
         current_batch_uc = {'txt': ""}
-        
+        #embedding ber kore ane
         c, uc = model.conditioner.get_unconditional_conditioning(
             current_batch,
             batch_uc=current_batch_uc,
@@ -298,6 +298,7 @@ def generate_conditioning_parts(prompts, model, num_samples, num_transition_bloc
                 
                 c_transition = {}
                 for k in base_conditions[i].keys():
+                    #TODO where at now
                     c_transition[k] = interpolate_conditions(
                         base_conditions[i][k],
                         base_conditions[i + 1][k],
@@ -432,7 +433,7 @@ def sampling_main(args, model_cls):
             batch_size = 1
 
             randn_noise_original = torch.randn(batch_size, *shape).to(torch.float32).to(device)
-            #TODO where we left off
+            
             
             randn_noise, tile_indices = process_noise_blocks(
                 randn_noise_original, 
@@ -445,7 +446,8 @@ def sampling_main(args, model_cls):
             print(f"Processing {len(prompts)} prompts: {prompts}")
             print(f"num of tile: {len(tile_indices)}")
             print(f"tile_indices: {tile_indices}")
-
+            #TODO where we left off
+            pdb.set_trace()
             c_total, uc_total = generate_conditioning_parts(
                 prompts, 
                 model, 
