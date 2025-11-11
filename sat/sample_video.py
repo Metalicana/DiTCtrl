@@ -9,7 +9,7 @@ from typing import List, Union
 from tqdm import tqdm
 from omegaconf import ListConfig
 import imageio
-
+# FILE OF INTEREST
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -414,6 +414,7 @@ def sampling_main(args, model_cls):
     with torch.no_grad():
         # for prompts, cnt in tqdm(data_iter):
         if True:
+            pdb.set_trace()
             prompts = args.prompts
             cnt = 0
             # reload model on GPU
@@ -447,8 +448,7 @@ def sampling_main(args, model_cls):
             print(f"Processing {len(prompts)} prompts: {prompts}")
             print(f"num of tile: {len(tile_indices)}")
             print(f"tile_indices: {tile_indices}")
-            #TODO where we left off
-            pdb.set_trace()
+            # pdb.set_trace()
             c_total, uc_total = generate_conditioning_parts(
                 prompts, 
                 model, 
