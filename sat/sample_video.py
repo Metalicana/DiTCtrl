@@ -383,12 +383,13 @@ def get_base_prompt_indices_with_longer_mid(tile_indices, prompts_length, num_tr
 def sampling_main(args, model_cls):
     # Model loading logic
     if isinstance(model_cls, type):
+        # SWISSS
         model = get_model(args, model_cls)
     else:
         model = model_cls
         
     AdaLNMixin_NAMES = args.adaln_mixin_names
-        
+    #Comes from SWISS ARMY TRANSFORMER    
     load_checkpoint(model, args)
     model.eval()
     # Config
@@ -397,7 +398,7 @@ def sampling_main(args, model_cls):
 
     #TODO Image size
     image_size = [480, 720]
-
+    # 5 Layers of abstraction
     sample_func_single = model.sample_single
     sample_func_multi_prompt = model.sample_multi_prompt
     #TODO Dimensions
