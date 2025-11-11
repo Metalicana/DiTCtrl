@@ -8,7 +8,7 @@
 7. `print_current_gpu_memory` this too
 8. [[process_multi_prompt_video_with_adaln]]
 9. `interpolate_conditions` Linear interpolation of two conditions
-10. `calculate_segments_per_prompt` first and last prompt use 1 segment, rest use more.
+10. [[calculate_segments_per_prompt]] first and last prompt use 1 segment, rest use more.
 11. `calculate_total_segments` a very weird way to sum up total segments
 12. [[generate_conditioning_parts]]
 13. `calculate_video_length` simple enough
@@ -21,5 +21,6 @@ Input args, model class ([[SATVideoDiffusionEngine]])
 2. Calculate `long_video_size` using the `calculate_video_length` function
 3. Noise and tiles returned from [[process_noise_blocks]]
 4. Get conditioning parts from [[generate_conditioning_parts]]
-5. Gets this layer called [[ADALN_mixin]]
+5. Gets this layer called [[ADALN_mixin]], which is in [[process_multi_prompt_video_with_adaln]]
 
+Processing
