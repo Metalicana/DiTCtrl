@@ -282,6 +282,7 @@ class FrozenT5Embedder(AbstractEmbModel):
         return self(text)
 
 # Radi added
+#huh
 class FrozenClipEmbedder(AbstractEmbModel):
     """Uses the CLIP transformer encoder for text"""
     def __init__(
