@@ -2,7 +2,8 @@ import math
 from contextlib import nullcontext
 from functools import partial
 from typing import Dict, List, Optional, Tuple, Union
-
+# FILE OF INTEREST
+# MODIFYING
 import kornia
 import numpy as np
 import torch
@@ -13,6 +14,8 @@ from torch.utils.checkpoint import checkpoint
 from transformers import (
     T5EncoderModel,
     T5Tokenizer,
+    CLIPVisionModel, 
+    CLIPImageProcessor
 )
 
 from ...util import (
@@ -277,3 +280,54 @@ class FrozenT5Embedder(AbstractEmbModel):
 
     def encode(self, text):
         return self(text)
+
+# Radi added
+class FrozenClipEmbedder(AbstractEmbModel):
+    """Uses the CLIP transformer encoder for text"""
+    def __init__(
+        self,
+        model_name="openai/clip-vit-large-patch14",
+        device="cuda",
+        freeze=True,
+        max_image_size=224,
+        cache_dir=None,
+    ):
+        super().__init__()
+
+        self.device = device
+        self.processor = CLIPImageProcessor.from_pretrained(model_name, cache_dir=cache_dir)
+        self.transformer = CLIPVisionModel.from_pretrained(model_name, cache_dir=cache_dir).to(device)
+
+        self.max_image_size = max_image_size
+
+        if freeze:
+            self.freeze()
+
+        # required for GeneralConditioner
+        self.input_key = "cond_image"
+
+    def freeze(self):
+        self.transformer.eval()
+        for p in self.transformer.parameters():
+            p.requires_grad = False
+
+    def forward(self, image: torch.Tensor):
+        """
+        image: [B, C, H, W] in 0..1
+        returns: [B, N_ctx, hidden_size]
+        """
+
+        # Preprocess like HF expects
+        # Using CLIPImageProcessor to handle normalization, resizing, etc.
+        pixel_values = self.processor(images=image, return_tensors="pt")["pixel_values"].to(self.device)
+
+        with torch.no_grad():
+            outputs = self.transformer(pixel_values=pixel_values)
+        
+        # outputs.last_hidden_state: [B, 1 + N_patches, hidden]
+        tokens = outputs.last_hidden_state  # we keep CLS + patch tokens
+
+        return tokens
+
+    # def encode(self, text):
+    #     return self(text)

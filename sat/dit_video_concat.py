@@ -1526,11 +1526,13 @@ class KVSharingAdaLNMixin(BaseMixin):
             qu_s, qu_t, qc_s, qc_t = query_layer.chunk(4)
             ku_s, ku_t, kc_s, kc_t = key_layer.chunk(4)
             vu_s, vu_t, vc_s, vc_t = value_layer.chunk(4)
+            print("KV-sharing active:", self.cur_step, self.cur_layer)
 
             # source branch
             out_u_s = old_impl(qu_s, ku_s, vu_s, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs)
             out_c_s = old_impl(qc_s, kc_s, vc_s, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs)
             # target branch
+            #TODO KEY VALUES USED FROM SOURCE TO TARGET
             out_u_t = self.attn_batch(qu_t, ku_s, vu_s, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs)
             out_c_t = self.attn_batch(qc_t, kc_s, vc_s, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs)
             

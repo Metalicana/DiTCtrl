@@ -1,0 +1,19 @@
+args:
+  seed: 42
+  is_run_isolated: False
+  output_dir: outputs/i2v_test
+
+  # IMPORTANT: This replaces text prompts entirely
+  prompts:
+    - "dummy prompt – unused in I2V (image conditioning only)"
+
+  # The ONLY needed input
+  cond_image: "cond_img.jpg"
+
+  # typical sampling settings
+  sampling_fps: 8
+  sampling_num_frames: 49
+  overlap_size: 8
+  latent_channels: 16
+  num_transition_blocks: 0
+  longer_mid_segment: 0
