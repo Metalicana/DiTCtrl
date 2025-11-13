@@ -1,5 +1,4 @@
-These are subclass of [[VideoDDIMSampler]]
-## Types of samplers here
-1. `VPSDEDPMPP2MSampler_Single` 
+The base class for a sampler is: [[BaseDiffusionSampler]]
+
 
 processing

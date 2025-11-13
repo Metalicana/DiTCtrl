@@ -21,6 +21,6 @@ Input args, model class ([[SATVideoDiffusionEngine]])
 2. Calculate `long_video_size` using the `calculate_video_length` function
 3. Noise and tiles returned from [[process_noise_blocks]]
 4. Get conditioning parts from [[generate_conditioning_parts]]
-5. Gets this layer called [[ADALN_mixin]], which is in [[process_multi_prompt_video_with_adaln]]
+5. Gets this layer called  which is in [[process_multi_prompt_video_with_adaln]]
 
 Processing
