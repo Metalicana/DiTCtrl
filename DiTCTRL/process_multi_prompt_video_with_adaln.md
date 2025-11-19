@@ -15,4 +15,4 @@ then it uses a for loop to decode chunks, instead of full 81 frames or however m
 saves video.
 Deletes the temporary stuff.
 
-processing
+Understood

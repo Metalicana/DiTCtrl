@@ -177,7 +177,8 @@ class AttentionMapController:
         B, HWF, T = attn_map.shape
         F = HWF // (self.height * self.width)
         attn_map = attn_map.reshape(B, F, self.height, self.width, T)
-
+        # TODO This is where attn_map is pulling value from the full attention map
+        # And it's only taking the attention map corresponding with the token only
         if isinstance(token_idx, (list, ListConfig)):
             attn_map = attn_map[..., token_idx]
             attn_map = attn_map.sum(dim=-1)  # Sum over selected tokens
@@ -1473,7 +1474,7 @@ class KVSharingAdaLNMixin(BaseMixin):
         if self.transformer.layernorm_order == "sandwich":
             text_mlp_output = layer.fourth_layernorm(text_mlp_output)
             img_mlp_output = layer.fourth_layernorm(img_mlp_output)
-
+        # PAY ATTENTION TODO
         img_hidden_states = img_hidden_states + gate_mlp * img_mlp_output  # vision (b,(t n),d)
         text_hidden_states = text_hidden_states + text_gate_mlp * text_mlp_output  # language (b,n,d)
 
@@ -1789,6 +1790,7 @@ class KVSharingMaskGuidedAdaLNMixin(BaseMixin):
 
         H = self.height
         W = self.width
+        # if I am in correct step and correct layer
         if self.cur_step in self.step_idx and self.cur_layer in self.layer_idx:
             qu_s, qu_t, qc_s, qc_t = query_layer.chunk(4)
             ku_s, ku_t, kc_s, kc_t = key_layer.chunk(4)
@@ -1855,7 +1857,7 @@ class KVSharingMaskGuidedAdaLNMixin(BaseMixin):
                 video_mask = spatial_mask.view(1, 1, video_length, 1).expand(B_fg, H, -1, -1)
                 # Concatenate text_mask and video_mask to form the complete mask
                 full_mask = torch.cat([text_mask, video_mask], dim=2)
-                
+                # TODO MATH IS MATHING HERE
                 out_u_t = out_u_t_fg * full_mask + out_u_t_bg * (1 - full_mask)
                 out_c_t = out_c_t_fg * full_mask + out_c_t_bg * (1 - full_mask)
                 
@@ -1881,7 +1883,7 @@ class KVSharingMaskGuidedAdaLNMixin(BaseMixin):
         q = q.contiguous()
         k = k.contiguous()
         v = v.contiguous()
-        
+        # WHAT THE HELL
         self_attns_mask = self.attn_controller.get_self_attn_mask()
         if self_attns_mask is not None:
             # Binarize self_attns_mask

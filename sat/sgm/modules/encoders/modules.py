@@ -284,7 +284,7 @@ class FrozenT5Embedder(AbstractEmbModel):
 # Radi added
 #huh
 class FrozenClipEmbedder(AbstractEmbModel):
-    """Uses the CLIP transformer encoder for text"""
+    """Uses the CLIP transformer encoder for image"""
     def __init__(
         self,
         model_name="openai/clip-vit-large-patch14",
