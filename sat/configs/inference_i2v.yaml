@@ -1,0 +1,53 @@
+args:
+  latent_channels: 16
+  mode: inference
+  load: "CogVideoX-2b-sat/transformer" # This is for Full model without lora adapter
+  batch_size: 1
+  sampling_num_frames: 13
+  sampling_fps: 16
+  fp16: True # For CogVideoX-2B
+  force_inference: True
+  is_run_isolated: False
+  seed: 42
+
+  output_dir: outputs/multi_prompt_case
+  adaln_mixin_names:  # Choose our KV-sharing
+    - 'KVSharingAdaLNMixin'
+    # - 'KVSharingMaskGuidedAdaLNMixin'    # If you want to use mask-guided KV-sharing, please notice the threshold/token_idx carefully
+
+  is_edit: False
+  # For KV-sharing and mask-guided
+  start_step: 2
+  end_step: 25
+  start_layer: 25
+  end_layer: 30
+  layer_idx: null  # You can specify layer_idx when KV-sharing. If not, it will follow start_layer and end_layer
+  step_idx: null   # You can specify step_idx when KV-sharing. If not, it will follow start_step and end_step
+  thres: 0.3       # threshold for segmentation binary mask
+  attn_map_step_idx: [4,14,24,34,44,49]  # save attention map at these steps
+  attn_map_layer_idx: [4,14,24,29]  # save attention map at these layers
+  mask_save_dir: ""               # save segmentation binary mask at this directory
+
+  # For latent blending
+  # We usually use (overlap_size, num_transition_blocks) = (9, 2) or (6, 1), and recommend (9,2) for future comparisons
+  # Since CogVideoX-2B has 13 latent frames, we used (6,1) in our paper which is approximately 1/2 stride of the total frames (6/13 ≈ 1/2). All baseline methods were aligned to use the same relative stride for fair comparison. 
+  # Recently, we found that (9,2) configuration (approximately 1/4 stride) achieves even better quantitative results than (6,1). For future comparisons with our method, we recommend using (9,2) as it demonstrates superior performance compared to the metrics reported in the paper.
+  
+  # The equation: total_segments = num_prompts + num_transition_blocks * (num_prompts - 1) + longer_mid_segment * (num_prompts - 2)
+  overlap_size: 9
+  num_transition_blocks: 2  # Gradually change semantics, mainly interpolating between different semantics at both ends
+  longer_mid_segment: 0     # which means give more time to the mid segment, in our paper we use 0
+
+  # If Mask-guided KV-sharing, we can specify the reference token index(P_i) and the current token index(P_i+1)
+  # Note that when multiple prompts(>2) and num_transition_blocks > 0, the ref_token_idx(P_i) and the cur_token_idx(P_i+1) need to be the same
+  # and we have to keep the prompts structure similar, where the object in the same index.
+  # But if just KV-sharing(no mask-guided), we can write prompt arbitrarily.
+
+  ref_token_idx: [0] # In "A dark knight running ....", [1, 2] is the index of "dark knight"
+  cur_token_idx: [0] # same as ref_token_idx
+
+  # Only for single prompt case
+  single_prompt_length: 0
+  # Only for reweight case
+  reweight_token_idx: 0
+  reweight_scale: -5
