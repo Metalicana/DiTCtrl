@@ -52,7 +52,6 @@ model:
         pos_embed_config:
           target: dit_video_concat.Rotary3DPositionEmbeddingMixin
           params:
-            learnable_pos_embed: True
             hidden_size_head: 64
             text_length: 226
 
