@@ -1,7 +1,7 @@
 args:
   latent_channels: 16
   mode: inference
-  load: "CogVideoX-2b-sat/transformer" # This is for Full model without lora adapter
+  load: "CogVideoX-5b-i2v-sat/transformer" # This is for Full model without lora adapter
   batch_size: 1
   sampling_num_frames: 13
   sampling_fps: 16

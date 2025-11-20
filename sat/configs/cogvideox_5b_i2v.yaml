@@ -38,7 +38,7 @@ model:
       hidden_size: 3072
       adm_in_channels: 256
       num_attention_heads: 48
-
+      text_length: 226 
       transformer_args:
         checkpoint_activations: True
         vocab_size: 1

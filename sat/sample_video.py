@@ -255,6 +255,67 @@ def calculate_total_segments(prompts_length, num_transition_blocks, longer_mid_s
     
     return base_segments + extra_mid_segments + transition_segments
 
+def generate_conditioning_parts_with_images(prompts, images, model, num_samples, num_transition_blocks, longer_mid_segment):
+    """
+    Generate conditions, supporting transition blocks and longer mid segments
+    """
+    
+    image_latents = model.first_stage_model.encode(images).to("cuda")
+
+    c_total = []
+    uc_total = []
+    
+    # Calculate the base segment count for each prompt
+    segments_per_prompt = calculate_segments_per_prompt(len(prompts), num_transition_blocks, longer_mid_segment)
+    
+    # Generate base conditions for each prompt
+    base_conditions = []
+    base_uc_conditions = []
+    for prompt, img_latent in zip(prompts, image_latents):
+        current_batch = {'txt': prompt, 'image': img_latent}
+        current_batch_uc = {'txt': "", 'image': img_latent}  # often, the unconditional image is identical
+        
+        c, uc = model.conditioner.get_unconditional_conditioning(
+            current_batch,
+            batch_uc=current_batch_uc,
+            force_uc_zero_embeddings=["txt"],  # image might not be zeroed depending on your model
+        )
+
+        for k in c:
+            if k != "crossattn":
+                c[k], uc[k] = map(lambda y: y[k][: math.prod(num_samples)].to("cuda"), (c, uc))
+        
+        base_conditions.append(c)
+        base_uc_conditions.append(uc)
+    
+    # Generate the final condition sequence
+    for i in range(len(prompts)):
+        # Add the base segments for the current prompt
+        for _ in range(segments_per_prompt[i]):
+            c_total.append(base_conditions[i])
+            uc_total.append(base_uc_conditions[i])
+        
+        # If not the last prompt, add transition blocks
+        #TODO this is where transition happens
+        if i < len(prompts) - 1:
+            for j in range(num_transition_blocks):
+                weight_2 = (j + 1) / (num_transition_blocks + 1)
+                weight_1 = 1 - weight_2
+                
+                c_transition = {}
+                for k in base_conditions[i].keys():
+                    #TODO where at now
+                    c_transition[k] = interpolate_conditions(
+                        base_conditions[i][k],
+                        base_conditions[i + 1][k],
+                        weight_1,
+                        weight_2
+                    )
+                c_total.append(c_transition)
+                uc_total.append(base_uc_conditions[i] if weight_1 > weight_2 else base_uc_conditions[i + 1])
+
+    return c_total, uc_total
+
 def generate_conditioning_parts(prompts, model, num_samples, num_transition_blocks, longer_mid_segment):
     """
     Generate conditions, supporting transition blocks and longer mid segments
