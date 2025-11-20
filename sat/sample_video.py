@@ -144,7 +144,7 @@ def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total,
                        C, H, W, F, 
                        randn_noise):  
     set_random_seed(args.seed)
-    pdb.set_trace()
+    # pdb.set_trace()
     model.switch_adaln_layer(adaln_name)
     load_checkpoint(model, args)
     model.to(device)
@@ -476,7 +476,7 @@ def sampling_main(args, model_cls):
     with torch.no_grad():
         # for prompts, cnt in tqdm(data_iter):
         if True:
-            pdb.set_trace()
+            # pdb.set_trace()
             prompts = args.prompts
             cnt = 0
             # reload model on GPU
