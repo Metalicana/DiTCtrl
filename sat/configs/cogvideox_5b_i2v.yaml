@@ -137,18 +137,16 @@ model:
             target: sgm.modules.diffusionmodules.discretizer.ZeroSNRDDPMDiscretization
             params:
               shift_scale: 1.0
-
-  sampler_config:
-    target: sgm.modules.diffusionmodules.sampling.VPSDEDPMPP2MSampler
+  sampler_ddim_config:
+    target: sgm.modules.diffusionmodules.sampling.VideoDDIMSampler
     params:
-      fixed_frames: 0
       num_steps: 50
       verbose: True
 
       discretization_config:
         target: sgm.modules.diffusionmodules.discretizer.ZeroSNRDDPMDiscretization
         params:
-          shift_scale: 1.0
+          shift_scale: 3.0
 
       guider_config:
         target: sgm.modules.diffusionmodules.guiders.DynamicCFG
@@ -156,3 +154,41 @@ model:
           scale: 6
           exp: 5
           num_steps: 50
+
+  sampler_single_config:
+    target: sgm.modules.diffusionmodules.sampling.VPSDEDPMPP2MSampler_Single
+    params:
+      num_steps: 50
+      verbose: True
+
+      discretization_config:
+        target: sgm.modules.diffusionmodules.discretizer.ZeroSNRDDPMDiscretization
+        params:
+          shift_scale: 3.0
+
+      guider_config:
+        target: sgm.modules.diffusionmodules.guiders.DynamicCFG
+        params:
+          scale: 6
+          exp: 5
+          num_steps: 50
+          
+  sampler_multi_prompt_config:
+  
+    target: sgm.modules.diffusionmodules.sampling.VPSDEDPMPP2MSampler_MultiPrompt
+    params:
+      num_steps: 50
+      verbose: True
+
+      discretization_config:
+        target: sgm.modules.diffusionmodules.discretizer.ZeroSNRDDPMDiscretization
+        params:
+          shift_scale: 3.0
+
+      guider_config:
+        target: sgm.modules.diffusionmodules.guiders.DynamicCFG
+        params:
+          scale: 6
+          exp: 5
+          num_steps: 50
+
