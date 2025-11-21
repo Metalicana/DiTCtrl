@@ -22,7 +22,7 @@ from sat.training.model_io import load_checkpoint
 from sat import mpu
 from sat.arguments import set_random_seed
 
-from diffusion_video import SATVideoDiffusionEngine
+from diffusion_video import SATVideoDiffusionEngine, SATVideoDiffusionEngineI2V
 from arguments import get_args
 from torchvision.transforms.functional import center_crop, resize
 from torchvision.transforms import InterpolationMode
@@ -492,4 +492,4 @@ if __name__ == "__main__":
     args.model_config.loss_fn_config.params.sigma_sampler_config.params.uniform_sampling = False
     print('##################HELLLOOOOO################')
     print(args)
-    sampling_main(args, model_cls=SATVideoDiffusionEngine)
+    sampling_main(args, model_cls=SATVideoDiffusionEngineI2V)

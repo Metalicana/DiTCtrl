@@ -844,6 +844,178 @@ class VPSDEDPMPP2MSampler_MultiPrompt(VideoDDIMSampler):
         return x
 
 
+class VPSDEDPMPP2MI2VSampler_MultiPrompt(VideoDDIMSampler):
+    def get_variables(self, alpha_cumprod_sqrt, next_alpha_cumprod_sqrt, previous_alpha_cumprod_sqrt=None):
+        alpha_cumprod = alpha_cumprod_sqrt**2
+        lamb = ((alpha_cumprod / (1 - alpha_cumprod)) ** 0.5).log()
+        next_alpha_cumprod = next_alpha_cumprod_sqrt**2
+        lamb_next = ((next_alpha_cumprod / (1 - next_alpha_cumprod)) ** 0.5).log()
+        h = lamb_next - lamb
+
+        if previous_alpha_cumprod_sqrt is not None:
+            previous_alpha_cumprod = previous_alpha_cumprod_sqrt**2
+            lamb_previous = ((previous_alpha_cumprod / (1 - previous_alpha_cumprod)) ** 0.5).log()
+            h_last = lamb - lamb_previous
+            r = h_last / h
+            return h, r, lamb, lamb_next
+        else:
+            return h, None, lamb, lamb_next
+
+    def get_mult(self, h, r, alpha_cumprod_sqrt, next_alpha_cumprod_sqrt, previous_alpha_cumprod_sqrt):
+        mult1 = ((1 - next_alpha_cumprod_sqrt**2) / (1 - alpha_cumprod_sqrt**2)) ** 0.5 * (-h).exp()
+        mult2 = (-2 * h).expm1() * next_alpha_cumprod_sqrt
+
+        if previous_alpha_cumprod_sqrt is not None:
+            mult3 = 1 + 1 / (2 * r)
+            mult4 = 1 / (2 * r)
+            return mult1, mult2, mult3, mult4
+        else:
+            return mult1, mult2
+    # modification
+    def sampler_step(
+        self,
+        old_denoised,
+        previous_alpha_cumprod_sqrt,
+        alpha_cumprod_sqrt,
+        next_alpha_cumprod_sqrt,
+        denoiser,
+        x,
+        cond,
+        uc=None,
+        idx=None,
+        timestep=None,
+        scale=None,
+        scale_emb=None,
+        indices=None,
+        noised_image=None
+    ):
+        denoised = torch.zeros_like(x)  # Initialize denoised tensor
+        weight_sum = torch.zeros((x.shape[1],), device=x.device)  # Initialize weight sum
+        segment_length = len(indices[0])
+        weight = (torch.arange(segment_length, device=x.device) + 0.5) * 2.0 / segment_length
+        weight = torch.minimum(weight, 2.0 - weight)
+        
+        # Process the adjacent two segments
+        for k in range(len(indices)-1):
+            current_idx = indices[k]
+            next_idx = indices[k+1]
+            # Get the latent of the current and next segment
+            x_current = x[:, current_idx]
+            x_next = x[:, next_idx]
+            x_combined = torch.cat([x_current, x_next], dim=0)
+            
+            # Get the corresponding condition
+            cond_current = cond[k]
+            cond_next = cond[k+1]
+            cond_combined = {key: torch.cat([cond_current[key], cond_next[key]], dim=0) for key in cond_current}
+            
+            if uc is not None:
+                uc_current = uc[k]
+                uc_next = uc[k+1]
+                uc_combined = {key: torch.cat([uc_current[key], uc_next[key]], dim=0) for key in uc_current}
+            else:
+                uc_combined = None
+
+            # Denoise the combined input
+            denoised_combined = self.denoise(
+                x_combined, denoiser, alpha_cumprod_sqrt.repeat(2), cond_combined, uc_combined,
+                timestep, idx, scale=scale, scale_emb=scale_emb,
+                noised_image=noised_image,        # NEW: forward it
+            ).to(torch.float32)
+            
+            # Separate the denoised results
+            denoised_current = denoised_combined[0].unsqueeze(0)
+            denoised_next = denoised_combined[1].unsqueeze(0)
+            
+            # Update the denoised result of the current segment using weights
+            denoised[:, current_idx] += denoised_current * weight[:, None, None, None]
+            weight_sum[current_idx] += weight
+            
+            # Update the denoised result of the next segment using weights
+            denoised[:, next_idx] += denoised_next * weight[:, None, None, None]
+            weight_sum[next_idx] += weight
+
+        # normalization
+        denoised.div_(weight_sum[:, None, None, None])
+        
+        if idx == 1:
+            return denoised, denoised
+
+        h, r, lamb, lamb_next = self.get_variables(
+            alpha_cumprod_sqrt, next_alpha_cumprod_sqrt, previous_alpha_cumprod_sqrt
+        )
+        mult = [
+            append_dims(mult, x.ndim)
+            for mult in self.get_mult(h, r, alpha_cumprod_sqrt, next_alpha_cumprod_sqrt, previous_alpha_cumprod_sqrt)
+        ]
+        mult_noise = append_dims((1 - next_alpha_cumprod_sqrt**2) ** 0.5 * (1 - (-2 * h).exp()) ** 0.5, x.ndim)
+
+        x_standard = mult[0] * x - mult[1] * denoised + mult_noise * torch.randn_like(x)
+        if old_denoised is None or torch.sum(next_alpha_cumprod_sqrt) < 1e-14:
+            # Save a network evaluation if all noise levels are 0 or on the first step
+            return x_standard, denoised
+        else:
+            denoised_d = mult[2] * denoised - mult[3] * old_denoised
+            x_advanced = mult[0] * x - mult[1] * denoised_d + mult_noise * torch.randn_like(x)
+
+            x = x_advanced
+
+        return x, denoised
+
+    def __call__(self, denoiser, x, cond, uc=None, 
+                 num_steps=None, scale=None, scale_emb=None,
+                 tile_size: int = 13, overlap_size: int = 9, noised_image=None):
+        x, s_in, alpha_cumprod_sqrt, num_sigmas, cond, uc, timesteps = self.prepare_sampling_loop(
+            x, cond, uc, num_steps
+        ) 
+               
+        if self.fixed_frames > 0:
+            prefix_frames = x[:, : self.fixed_frames]
+        old_denoised = None
+        long_video_length = x.shape[1]
+
+
+        # Calculate the starting positions of all segments
+        tile_starts = []
+        current_start = 0
+        while current_start + tile_size <= long_video_length:
+            tile_starts.append(current_start)
+            current_start += tile_size - overlap_size
+
+        tile_indices = [list(range(start, start + tile_size)) for start in tile_starts]
+
+        for i in self.get_sigma_gen(num_sigmas):
+            if self.fixed_frames > 0:
+                if self.sdedit:
+                    rd = torch.randn_like(prefix_frames)
+                    noised_prefix_frames = alpha_cumprod_sqrt[i] * prefix_frames + rd * append_dims(
+                        s_in * (1 - alpha_cumprod_sqrt[i] ** 2) ** 0.5, len(prefix_frames.shape)
+                    )
+                    x = torch.cat([noised_prefix_frames, x[:, self.fixed_frames :]], dim=1)
+                else:
+                    x = torch.cat([prefix_frames, x[:, self.fixed_frames :]], dim=1)
+            x, old_denoised = self.sampler_step(
+                old_denoised,
+                None if i == 0 else s_in * alpha_cumprod_sqrt[i - 1],
+                s_in * alpha_cumprod_sqrt[i],
+                s_in * alpha_cumprod_sqrt[i + 1],
+                denoiser,
+                x,
+                cond,
+                uc=uc,
+                idx=self.num_steps - i,
+                timestep=timesteps[-(i + 1)],
+                scale=scale,
+                scale_emb=scale_emb,
+                indices = tile_indices,
+                noised_image=noised_image
+            )
+
+        if self.fixed_frames > 0:
+            x = torch.cat([prefix_frames, x[:, self.fixed_frames :]], dim=1)
+
+        return x
+
 
 class VPODEDPMPP2MSampler(VideoDDIMSampler):
     def get_variables(self, alpha_cumprod_sqrt, next_alpha_cumprod_sqrt, previous_alpha_cumprod_sqrt=None):

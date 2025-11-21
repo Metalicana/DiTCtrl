@@ -175,7 +175,7 @@ model:
           
   sampler_multi_prompt_config:
   
-    target: sgm.modules.diffusionmodules.sampling.VPSDEDPMPP2MSampler_MultiPrompt
+    target: sgm.modules.diffusionmodules.sampling.VPSDEDPMPP2MI2VSampler_MultiPrompt
     params:
       num_steps: 50
       verbose: True
