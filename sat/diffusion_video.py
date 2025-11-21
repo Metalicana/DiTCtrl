@@ -607,9 +607,32 @@ class SATVideoDiffusionEngineI2V(nn.Module):
         scale = None
         scale_emb = None
 
-        denoiser = lambda input, sigma, c, **addtional_model_inputs: self.denoiser(
-            self.model, input, sigma, c, concat_images=concat_images, **addtional_model_inputs
-        )
+        # Manual concat so the transformer always sees 32 channels (I2V)
+        def denoiser(input, sigma, c, **extra):
+            x = input  # x is [B, C, T, H', W'] or [B, T, C, H', W']
+            z = concat_images
+            if z is not None:
+                # match device/dtype
+                z = z.to(x.device, dtype=x.dtype)
+
+                # z: [B,16,1,H',W'] -> match time dimension of x
+                if x.ndim != 5 or z.ndim != 5:
+                    raise RuntimeError(f"expected 5D tensors, got x:{x.shape}, z:{z.shape}")
+
+                # Expand z across time if needed
+                T = x.shape[2] if x.shape[1] in (16, 32) else x.shape[1]
+                if z.shape[2] == 1 and T > 1:
+                    z = z.expand(-1, -1, T, -1, -1)  # [B,16,T,H',W']
+
+                # Detect layout and concatenate along channel axis
+                if x.shape[1] in (16, 32):  # layout [B, C, T, H', W']
+                    x = torch.cat([x, z], dim=1)      # -> [B, 32, T, H', W']
+                else:                                  # layout [B, T, C, H', W']
+                    z_t = z.permute(0, 2, 1, 3, 4)    # -> [B, T, 16, H', W']
+                    x = torch.cat([x, z_t], dim=2)    # -> [B, T, 32, H', W']
+
+            # now call the actual denoiser with the 32‑channel tensor
+            return self.denoiser(self.model, x, sigma, c, **extra)
         
         samples = self.sampler_multi_prompt(denoiser, randn, cond, uc=uc,      
                                 scale=scale, scale_emb=scale_emb, 
