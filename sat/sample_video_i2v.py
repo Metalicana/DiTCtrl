@@ -28,7 +28,18 @@ from torchvision.transforms.functional import center_crop, resize
 from torchvision.transforms import InterpolationMode
 
 import pdb
+# Add necessary imports for image loading
+from PIL import Image
 
+
+def load_and_preprocess_image(image_path, image_size):
+    image = Image.open(image_path).convert("RGB")
+    transform = TT.Compose([
+    TT.Resize(image_size, interpolation=InterpolationMode.BICUBIC),
+    TT.ToTensor(),
+    TT.Normalize([0.5], [0.5])
+    ])
+    return transform(image).unsqueeze(0).to("cuda")
 def read_from_cli():
     cnt = 0
     try:
@@ -445,186 +456,67 @@ def get_base_prompt_indices_with_longer_mid(tile_indices, prompts_length, num_tr
 def sampling_main(args, model_cls):
     # Model loading logic
     if isinstance(model_cls, type):
-        # SWISSS
         model = get_model(args, model_cls)
     else:
         model = model_cls
-        
     AdaLNMixin_NAMES = args.adaln_mixin_names
-    #Comes from SWISS ARMY TRANSFORMER    
     load_checkpoint(model, args)
     model.eval()
-    # Config
-    rank, world_size = mpu.get_data_parallel_rank(), mpu.get_data_parallel_world_size()
-    print("rank and world_size", rank, world_size)
 
-    # images = args.
-    #TODO Image size
+
+    device = model.device
     image_size = [480, 720]
-    # 5 Layers of abstraction
-    sample_func_single = model.sample_single
     sample_func_multi_prompt = model.sample_multi_prompt
-    #TODO Dimensions
     H, W, C, F = image_size[0], image_size[1], args.latent_channels, 8
     tile_size = args.sampling_num_frames
     overlap_size = args.overlap_size
     num_transition_blocks = args.num_transition_blocks
     longer_mid_segment = args.longer_mid_segment
     num_samples = [1]
-    force_uc_zero_embeddings = ["txt"]
-    device = model.device
+
 
     with torch.no_grad():
-        # for prompts, cnt in tqdm(data_iter):
-        if True:
-            # pdb.set_trace()
-            prompts = args.prompts
-            cnt = 0
-            # reload model on GPU
-            model.to(device)
-            set_random_seed(args.seed)
-            print("\n")
-            print("rank:", rank, "start to process", prompts, cnt)
-            print_current_gpu_memory(device)
-            
-            long_video_size = calculate_video_length(
-                len(prompts), 
-                tile_size, 
-                overlap_size, 
-                num_transition_blocks,
-                longer_mid_segment
-            )
-            shape=(long_video_size, C, H // F, W // F)
-            batch_size = 1
+        prompts = args.prompts
+        images_paths = args.images_paths
 
-            randn_noise_original = torch.randn(batch_size, *shape).to(torch.float32).to(device)
-            
-            
-            randn_noise, tile_indices = process_noise_blocks(
-                randn_noise_original, 
-                len(prompts),
-                tile_size, 
-                overlap_size, 
-                long_video_size,
-                num_transition_blocks
-            )
-            print(f"Processing {len(prompts)} prompts: {prompts}")
-            print(f"num of tile: {len(tile_indices)}")
-            print(f"tile_indices: {tile_indices}")
-            # pdb.set_trace()
-            c_total, uc_total = generate_conditioning_parts_with_images(
-                prompts, 
-                model, 
-                num_samples,
-                num_transition_blocks,
-                longer_mid_segment
-            )
 
-            ''''for comparison, single-prompt based video generation'''
-            if args.is_run_isolated:
-                iso_samples = []
-                for index, prompt in enumerate(prompts): 
-                    # reload model on GPU
-                    model.to(device)
-                    
-                    # Get the indices of all prompts, considering longer_mid_segment
-                    base_prompt_indices = get_base_prompt_indices_with_longer_mid(
-                        tile_indices, 
-                        len(prompts), 
-                        args.num_transition_blocks,
-                        longer_mid_segment
-                    )
-                    current_prompt_indices = base_prompt_indices[index]
-                    
-                    # calculate current prompt index 
-                    condition_index = 0
-                    for i in range(index):
-                        if i == 0 or i == len(prompts) - 1:
-                            condition_index += 1 
-                        else:
-                            condition_index += (1 + longer_mid_segment)
-                        condition_index += args.num_transition_blocks
-                    print(f"condition_index: {condition_index}")
-                    print(f"isolated current_prompt_indices: {current_prompt_indices}")
-                    samples_z = sample_func_single(
-                        c_total[condition_index],
-                        uc=uc_total[condition_index],
-                        randn=randn_noise[:, current_prompt_indices]
-                    )
-                    samples_z = samples_z.permute(0, 2, 1, 3, 4).contiguous()
-                    # Unload the model from GPU to save GPU memory
-                    model.to("cpu")
-                    torch.cuda.empty_cache()
-                    first_stage_model = model.first_stage_model
-                    first_stage_model = first_stage_model.to(device)
+        images = [load_and_preprocess_image(path, image_size) for path in images_paths]
 
-                    latent = 1.0 / model.scale_factor * samples_z
 
-                    # Decode latent serial to save GPU memory
-                    recons = []
-                    loop_num = (tile_size - 1) // 2
-                    for i in range(loop_num):
-                        if i == 0:
-                            start_frame, end_frame = 0, 3
-                        else:
-                            start_frame, end_frame = i * 2 + 1, i * 2 + 3
-                        if i == loop_num - 1:
-                            clear_fake_cp_cache = True
-                        else:
-                            clear_fake_cp_cache = False
-                        with torch.no_grad():
-                            recon = first_stage_model.decode(
-                                latent[:, :, start_frame:end_frame].contiguous(), clear_fake_cp_cache=clear_fake_cp_cache
-                            )
+        model.to(device)
+        set_random_seed(args.seed)
 
-                        recons.append(recon)
 
-                    recon = torch.cat(recons, dim=2).to(torch.float32)
-                    samples_x = recon.permute(0, 2, 1, 3, 4).contiguous()
-                    samples = torch.clamp((samples_x + 1.0) / 2.0, min=0.0, max=1.0).cpu()
+        long_video_size = calculate_video_length(
+        len(prompts), tile_size, overlap_size, num_transition_blocks, longer_mid_segment
+        )
+        shape = (long_video_size, C, H // F, W // F)
+        batch_size = 1
 
-                    save_path = os.path.join(
-                        args.output_dir, 
-                        "isolated",
-                        str(index) + "_" + prompts[index].replace(" ", "_").replace("/", "")[:120]
-                    )
-                    if mpu.get_model_parallel_rank() == 0:
-                        save_video_as_grid_and_mp4(samples, save_path, fps=args.sampling_fps)
-                    print(f'finish isolated_{index}')
-                    iso_samples.append(samples)
 
-                print_current_gpu_memory(device)
-                iso_samples = torch.concat(iso_samples, dim=1)
-                save_path = os.path.join(
-                        args.output_dir, 
-                        "isolated",
-                        "all",
-                    )
-                if mpu.get_model_parallel_rank() == 0:
-                    save_video_as_grid_and_mp4(iso_samples, save_path, fps=args.sampling_fps)
-                print(f'finish isolated all!!')
-                
-                del samples_z, latent, recons, recon, samples_x, samples
-                torch.cuda.empty_cache()
-            
-            ''''multi-prompt based long video generation'''
-            for i, adaln_name in enumerate(AdaLNMixin_NAMES):
-                process_multi_prompt_video_with_adaln(model, args, 
-                                                    c_total, uc_total,
-                                                    prompts, cnt, adaln_name, device, 
-                                                    sample_func_multi_prompt, #multi_prompt sample func
-                                                    tile_size,
-                                                    overlap_size,
-                                                    long_video_size, 
-                                                    C, H, W, F, 
-                                                    randn_noise.clone())
-            # For BaseVersion
-            model.switch_adaln_layer('BaseAdaLNMixin')
-            load_checkpoint(model, args)
-            model.to(device)
-            model.eval()
+        randn_noise_original = torch.randn(batch_size, *shape).to(device)
 
-    
+
+        randn_noise, tile_indices = process_noise_blocks(
+        randn_noise_original, len(prompts), tile_size, overlap_size, long_video_size, num_transition_blocks
+        )
+
+
+        c_total, uc_total = generate_conditioning_parts_with_images(
+        prompts, images, model, num_samples, num_transition_blocks, longer_mid_segment
+        )
+
+
+    for i, adaln_name in enumerate(AdaLNMixin_NAMES):
+        process_multi_prompt_video_with_adaln(model, args,
+        c_total, uc_total,
+        prompts, 0, adaln_name, device,
+        sample_func_multi_prompt,
+        tile_size, overlap_size,
+        long_video_size,
+        C, H, W, F,
+        randn_noise.clone())
+
 if __name__ == "__main__":
     if "OMPI_COMM_WORLD_LOCAL_RANK" in os.environ:
         os.environ["LOCAL_RANK"] = os.environ["OMPI_COMM_WORLD_LOCAL_RANK"]
