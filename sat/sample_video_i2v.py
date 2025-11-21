@@ -35,11 +35,12 @@ from PIL import Image
 def load_and_preprocess_image(image_path, image_size):
     image = Image.open(image_path).convert("RGB")
     transform = TT.Compose([
-    TT.Resize(image_size, interpolation=InterpolationMode.BICUBIC),
-    TT.ToTensor(),
-    TT.Normalize([0.5], [0.5])
+        TT.Resize(image_size, interpolation=InterpolationMode.BICUBIC),
+        TT.ToTensor(),
+        TT.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
     ])
     return transform(image).unsqueeze(0).to("cuda")
+
 def read_from_cli():
     cnt = 0
     try:
