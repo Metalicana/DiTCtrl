@@ -2,7 +2,8 @@ args:
   is_run_isolated: False
   seed: 42
   output_dir: outputs/multi_prompt_case/rose
-  input_image: "/home/ab575577/projects_fall_2025/video-gen-models/DiTCtrl/sat/inference_case_configs/rose.jpg"
+  input_image: 
+    - "/home/ab575577/projects_fall_2025/video-gen-models/DiTCtrl/sat/inference_case_configs/rose.jpg"
   prompts:
     - "A gentle close shot of the same rose petal, where the camera gradually pulls back to reveal the entire unfurling bloom in its perfect symmetry."
     - "A steady medium shot of the rose, where the camera continues retreating to show the full stem with its leaves and neighboring buds."
