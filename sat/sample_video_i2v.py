@@ -147,7 +147,7 @@ def print_current_gpu_memory(device):
     print(f"Memory Allocated: {torch.cuda.memory_allocated(device) / 1024 ** 2:.2f} MB")
     print(f"Memory Reserved: {torch.cuda.memory_reserved(device) / 1024 ** 2:.2f} MB")
 
-def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total, images,
+def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total, img_latent,
                        prompts, cnt, adaln_name, device, 
                        sample_func,
                        tile_size, 
@@ -165,6 +165,7 @@ def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total, images
     samples_z = sample_func(
         c_total,
         uc=uc_total,
+        noised_image=img_latent,
         randn=randn_noise,
         tile_size = tile_size,
         overlap_size = overlap_size,
@@ -464,7 +465,7 @@ def sampling_main(args, model_cls):
 
     for i, adaln_name in enumerate(AdaLNMixin_NAMES):
         process_multi_prompt_video_with_adaln(model, args,
-        c_total, uc_total, images,
+        c_total, uc_total, img_latent,
         prompts, 0, adaln_name, device,
         sample_func_multi_prompt,
         tile_size, overlap_size,
