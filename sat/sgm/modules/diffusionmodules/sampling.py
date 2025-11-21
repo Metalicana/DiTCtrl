@@ -930,8 +930,9 @@ class VPSDEDPMPP2MI2VSampler_MultiPrompt(VideoDDIMSampler):
 
             # Denoise the combined input
             # Make idx a tensor for VideoScaling
+            Bc = x_combined.shape[0]  # here Bc == 2
             if isinstance(idx, int):
-                idx = torch.tensor([idx], device=x.device, dtype=torch.long)
+                idx = torch.full((Bc,), idx, device=x_combined.device, dtype=torch.long)
             denoised_combined = self.denoise(
                 x_combined, denoiser, alpha_cumprod_sqrt.repeat(2), cond_combined, uc_combined,
                 timestep, idx, scale=scale, scale_emb=scale_emb,
