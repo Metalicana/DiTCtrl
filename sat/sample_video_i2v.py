@@ -147,7 +147,7 @@ def print_current_gpu_memory(device):
     print(f"Memory Allocated: {torch.cuda.memory_allocated(device) / 1024 ** 2:.2f} MB")
     print(f"Memory Reserved: {torch.cuda.memory_reserved(device) / 1024 ** 2:.2f} MB")
 
-def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total, 
+def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total, images,
                        prompts, cnt, adaln_name, device, 
                        sample_func,
                        tile_size, 
@@ -267,76 +267,7 @@ def calculate_total_segments(prompts_length, num_transition_blocks, longer_mid_s
     
     return base_segments + extra_mid_segments + transition_segments
 
-def generate_conditioning_parts_with_images(prompts, images, model, num_samples, num_transition_blocks, longer_mid_segment):
-    """
-    Generate conditions, supporting transition blocks and longer mid segments
-    """
-    
-    # Stack list of [1, 3, H, W] into [T, 3, H, W]
-    images_tensor = torch.cat(images, dim=0)  # [T, 3, H, W]
-    images_tensor = images_tensor.permute(1, 0, 2, 3).unsqueeze(0).to("cuda")  # [1, 3, T, H, W]
-    images_tensor = images_tensor.contiguous()
 
-    image_latents = model.first_stage_model.encode(images_tensor)  # [1, C, T', H', W']
-    # Split along time dimension (dim=2)
-    image_latents = image_latents.squeeze(0).permute(1, 0, 2, 3).contiguous()  # [T, C, H, W]
-
-
-
-
-    c_total = []
-    uc_total = []
-    
-    # Calculate the base segment count for each prompt
-    segments_per_prompt = calculate_segments_per_prompt(len(prompts), num_transition_blocks, longer_mid_segment)
-    
-    # Generate base conditions for each prompt
-    base_conditions = []
-    base_uc_conditions = []
-    for prompt, img_latent in zip(prompts, image_latents):
-        current_batch = {'txt': prompt, 'image': img_latent}
-        current_batch_uc = {'txt': "", 'image': img_latent}  # often, the unconditional image is identical
-        
-        c, uc = model.conditioner.get_unconditional_conditioning(
-            current_batch,
-            batch_uc=current_batch_uc,
-            force_uc_zero_embeddings=["txt"],  # image might not be zeroed depending on your model
-        )
-
-        for k in c:
-            if k != "crossattn":
-                c[k], uc[k] = map(lambda y: y[k][: math.prod(num_samples)].to("cuda"), (c, uc))
-        
-        base_conditions.append(c)
-        base_uc_conditions.append(uc)
-    
-    # Generate the final condition sequence
-    for i in range(len(prompts)):
-        # Add the base segments for the current prompt
-        for _ in range(segments_per_prompt[i]):
-            c_total.append(base_conditions[i])
-            uc_total.append(base_uc_conditions[i])
-        
-        # If not the last prompt, add transition blocks
-        #TODO this is where transition happens
-        if i < len(prompts) - 1:
-            for j in range(num_transition_blocks):
-                weight_2 = (j + 1) / (num_transition_blocks + 1)
-                weight_1 = 1 - weight_2
-                
-                c_transition = {}
-                for k in base_conditions[i].keys():
-                    #TODO where at now
-                    c_transition[k] = interpolate_conditions(
-                        base_conditions[i][k],
-                        base_conditions[i + 1][k],
-                        weight_1,
-                        weight_2
-                    )
-                c_total.append(c_transition)
-                uc_total.append(base_uc_conditions[i] if weight_1 > weight_2 else base_uc_conditions[i + 1])
-
-    return c_total, uc_total
 
 def generate_conditioning_parts(prompts, model, num_samples, num_transition_blocks, longer_mid_segment):
     """
@@ -492,6 +423,14 @@ def sampling_main(args, model_cls):
 
 
         images = [load_and_preprocess_image(path, image_size) for path in images_paths]
+        # Stack into batch: [B,3,H,W]
+        images_tensor = torch.stack(images, dim=0).to(device)
+
+        # Add a time axis for the 3D‑VAE: [B,3,1,H,W]
+        pdb.set_trace()
+        if images_tensor.ndim == 4:
+            images_tensor = images_tensor.unsqueeze(2)
+        img_latent = model.first_stage_model.encode(images_tensor)
 
 
         model.to(device)
@@ -513,14 +452,14 @@ def sampling_main(args, model_cls):
         )
 
 
-        c_total, uc_total = generate_conditioning_parts_with_images(
-        prompts, images, model, num_samples, num_transition_blocks, longer_mid_segment
+        c_total, uc_total = generate_conditioning_parts(
+        prompts, model, num_samples, num_transition_blocks, longer_mid_segment
         )
 
 
     for i, adaln_name in enumerate(AdaLNMixin_NAMES):
         process_multi_prompt_video_with_adaln(model, args,
-        c_total, uc_total,
+        c_total, uc_total, images,
         prompts, 0, adaln_name, device,
         sample_func_multi_prompt,
         tile_size, overlap_size,

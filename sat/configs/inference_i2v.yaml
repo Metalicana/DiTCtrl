@@ -1,5 +1,6 @@
 args:
   latent_channels: 16
+  i2v_strength: 0.7 
   mode: inference
   load: "CogVideoX-5b-i2v-sat/transformer" # This is for Full model without lora adapter
   batch_size: 1
