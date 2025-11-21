@@ -523,7 +523,6 @@ if __name__ == "__main__":
         os.environ["WORLD_SIZE"] = os.environ["OMPI_COMM_WORLD_SIZE"]
         os.environ["RANK"] = os.environ["OMPI_COMM_WORLD_RANK"]
     py_parser = argparse.ArgumentParser(add_help=False)
-    py_parser.add_argument("--input_image", type=str, required=True)
     known, args_list = py_parser.parse_known_args()   
     # pdb.set_trace()
     args = get_args(args_list)
