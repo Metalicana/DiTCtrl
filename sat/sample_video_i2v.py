@@ -534,5 +534,6 @@ if __name__ == "__main__":
     args.model_config.network_config.params.transformer_args.model_parallel_size = 1
     args.model_config.network_config.params.transformer_args.checkpoint_activations = False
     args.model_config.loss_fn_config.params.sigma_sampler_config.params.uniform_sampling = False
+    print('##################HELLLOOOOO################')
     print(args)
     sampling_main(args, model_cls=SATVideoDiffusionEngine)
