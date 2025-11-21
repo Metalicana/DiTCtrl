@@ -423,13 +423,18 @@ def sampling_main(args, model_cls):
 
 
         images = [load_and_preprocess_image(path, image_size) for path in images_paths]
-        # Stack into batch: [B,3,H,W]
-        images_tensor = torch.stack(images, dim=0).to(device)
 
-        # Add a time axis for the 3D‑VAE: [B,3,1,H,W]
-        pdb.set_trace()
-        if images_tensor.ndim == 4:
-            images_tensor = images_tensor.unsqueeze(2)
+        # ✅ 1. keep only the first image (I2V uses one conditioning frame)
+        img = images[0]             # shape [3, H, W]
+
+        # ✅ 2. make a batch dimension
+        images_tensor = img.unsqueeze(0)   # [1, 3, H, W]
+
+        # ✅ 3. add the temporal dimension for the 3D‑VAE
+        images_tensor = images_tensor.unsqueeze(2)   # [1, 3, 1, H, W]
+
+        # ✅ 4. move to device and encode with the 3D‑VAE
+        images_tensor = images_tensor.to(device)
         img_latent = model.first_stage_model.encode(images_tensor)
 
 
