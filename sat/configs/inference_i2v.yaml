@@ -5,7 +5,7 @@ args:
   batch_size: 1
   sampling_num_frames: 13
   sampling_fps: 16
-  fp16: True # For CogVideoX-2B
+  fp16: False # For CogVideoX-2B
   force_inference: True
   is_run_isolated: False
   seed: 42
