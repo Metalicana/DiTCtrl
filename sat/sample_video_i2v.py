@@ -429,7 +429,7 @@ def sampling_main(args, model_cls):
         img = images[0]             # shape [3, H, W]
 
         # ✅ 2. make a batch dimension
-        images_tensor = img.unsqueeze(0)   # [1, 3, H, W]
+        # images_tensor = img.unsqueeze(0)   # [1, 3, H, W]
 
         # ✅ 3. add the temporal dimension for the 3D‑VAE
         images_tensor = images_tensor.unsqueeze(2)   # [1, 3, 1, H, W]
