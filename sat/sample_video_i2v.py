@@ -165,7 +165,7 @@ def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total, img_la
     samples_z = sample_func(
         c_total,
         uc=uc_total,
-        noised_image=img_latent,
+        concat_images=img_latent,
         randn=randn_noise,
         tile_size = tile_size,
         overlap_size = overlap_size,
