@@ -655,7 +655,7 @@ class SATVideoDiffusionEngineI2V(nn.Module):
                     z_t = z.permute(0, 2, 1, 3, 4)
                     x = torch.cat([x, z_t], dim=2)
 
-            return self.denoiser(self.model, x, sigma, c, **extra)
+            return self.model(x, sigma, c, **extra)
 
         
         samples = self.sampler_multi_prompt(denoiser, randn, cond, uc=uc,      
