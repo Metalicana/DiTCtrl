@@ -524,7 +524,7 @@ if __name__ == "__main__":
         os.environ["RANK"] = os.environ["OMPI_COMM_WORLD_RANK"]
     py_parser = argparse.ArgumentParser(add_help=False)
     known, args_list = py_parser.parse_known_args()
-    pdb.set_trace()
+    # pdb.set_trace()
     args = get_args(args_list)
     args = argparse.Namespace(**vars(args), **vars(known))
     del args.deepspeed_config
