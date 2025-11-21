@@ -954,8 +954,9 @@ class VPSDEDPMPP2MI2VSampler_MultiPrompt(VideoDDIMSampler):
         # normalization
         denoised.div_(weight_sum[:, None, None, None])
         
-        if idx == 1:
+        if torch.all(idx == 1):
             return denoised, denoised
+
 
         h, r, lamb, lamb_next = self.get_variables(
             alpha_cumprod_sqrt, next_alpha_cumprod_sqrt, previous_alpha_cumprod_sqrt
