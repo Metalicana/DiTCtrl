@@ -275,6 +275,8 @@ def generate_conditioning_parts_with_images(prompts, images, model, num_samples,
     # Stack list of [1, 3, H, W] into [T, 3, H, W]
     images_tensor = torch.cat(images, dim=0)  # [T, 3, H, W]
     images_tensor = images_tensor.permute(1, 0, 2, 3).unsqueeze(0).to("cuda")  # [1, 3, T, H, W]
+    images_tensor = images_tensor.contiguous()
+
     image_latents = model.first_stage_model.encode(images_tensor)  # [1, C, T', H', W']
     # Split along time dimension (dim=2)
     image_latents = image_latents.squeeze(0).permute(1, 0, 2, 3).contiguous()  # [T, C, H, W]
