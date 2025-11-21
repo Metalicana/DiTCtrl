@@ -45,6 +45,9 @@ def add_model_config_args(parser):
     group.add_argument("--reweight-scale", type=float, help="Reweight scale")
     group.add_argument("--is-run-isolated", type=bool, default=False, help="If running isolated video for comparison")
     group.add_argument("--single-prompt-length", type=int, default=0, help="Length of single prompt")
+    
+    group.add_argument("--input-image", type=str, help="Path to input image")
+
 
     return parser
 
