@@ -271,7 +271,9 @@ def generate_conditioning_parts_with_images(prompts, images, model, num_samples,
     Generate conditions, supporting transition blocks and longer mid segments
     """
     
-    image_latents = model.first_stage_model.encode(images).to("cuda")
+    images_tensor = torch.cat(images, dim=0).to("cuda")  # shape: [N, C, H, W]
+    image_latents = model.first_stage_model.encode(images_tensor)
+
 
     c_total = []
     uc_total = []
