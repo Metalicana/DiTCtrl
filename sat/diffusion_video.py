@@ -633,30 +633,30 @@ class SATVideoDiffusionEngineI2V(nn.Module):
 
         # Manual concat so the transformer always sees 32 channels (I2V)
         def denoiser(input, sigma, c, **extra):
-            x = input  # x is [B, C, T, H', W'] or [B, T, C, H', W']
+            x = input
             z = concat_images
             if z is not None:
-                # match device/dtype
                 z = z.to(x.device, dtype=x.dtype)
 
-                # z: [B,16,1,H',W'] -> match time dimension of x
+                # ensure same batch size
+                if z.shape[0] != x.shape[0]:
+                    z = z.repeat(x.shape[0], 1, 1, 1, 1)
+
                 if x.ndim != 5 or z.ndim != 5:
                     raise RuntimeError(f"expected 5D tensors, got x:{x.shape}, z:{z.shape}")
 
-                # Expand z across time if needed
                 T = x.shape[2] if x.shape[1] in (16, 32) else x.shape[1]
                 if z.shape[2] == 1 and T > 1:
-                    z = z.expand(-1, -1, T, -1, -1)  # [B,16,T,H',W']
+                    z = z.expand(-1, -1, T, -1, -1)
 
-                # Detect layout and concatenate along channel axis
-                if x.shape[1] in (16, 32):  # layout [B, C, T, H', W']
-                    x = torch.cat([x, z], dim=1)      # -> [B, 32, T, H', W']
-                else:                                  # layout [B, T, C, H', W']
-                    z_t = z.permute(0, 2, 1, 3, 4)    # -> [B, T, 16, H', W']
-                    x = torch.cat([x, z_t], dim=2)    # -> [B, T, 32, H', W']
+                if x.shape[1] in (16, 32):        # [B, C, T, H′, W′]
+                    x = torch.cat([x, z], dim=1)  # [B, 32, T, H′, W′]
+                else:                             # [B, T, C, H′, W′]
+                    z_t = z.permute(0, 2, 1, 3, 4)
+                    x = torch.cat([x, z_t], dim=2)
 
-            # now call the actual denoiser with the 32‑channel tensor
             return self.denoiser(self.model, x, sigma, c, **extra)
+
         
         samples = self.sampler_multi_prompt(denoiser, randn, cond, uc=uc,      
                                 scale=scale, scale_emb=scale_emb, 
