@@ -872,6 +872,18 @@ class VPSDEDPMPP2MI2VSampler_MultiPrompt(VideoDDIMSampler):
         else:
             return mult1, mult2
     # modification
+    def denoise(self, x, denoiser, alpha_cumprod_sqrt, cond, uc=None,
+                timestep=None, idx=None, scale=None, scale_emb=None, **extra):
+        """
+        Accept arbitrary extra keywords (e.g., noised_image) and forward them.
+        """
+        # The base version likely calls the lambda 'denoiser' you pass from the engine
+        return denoiser(
+            x, alpha_cumprod_sqrt, cond,
+            uc=uc, timestep=timestep, idx=idx,
+            scale=scale, scale_emb=scale_emb,
+            **extra               # <-- forward extras like noised_image
+        )
     def sampler_step(
         self,
         old_denoised,
