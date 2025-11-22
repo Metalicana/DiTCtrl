@@ -39,5 +39,10 @@ An NN Module.
 9. `log_conditionings`
 10. `log_video`
 #### `disable_untrainable_params`
+Go through all the named parameters, if the requires_grad is false, then continue. Otherwise, checks some prefix, or if starts with some prefix within the not_trainable_prefixes, then flag is raised, and their requires_grad is turned False.
+#### `_init_first_stage`
+it loads model from config. Then disables training. makes all parameter requires_grad false, and then sets first_stage_model of this class, as it.
 
+#### `forward`
+It calculates loss, by invoking self.loss_fn with modell, denoiser, conditioner, x, and batch. Here what this x is, is important.
 processing
