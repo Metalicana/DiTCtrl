@@ -47,38 +47,55 @@ class IdentityWrapper(nn.Module):
 #             raise AttributeError(f"The diffusion model does not have a method named 'switch_adaln_layer'")
 
 class OpenAIWrapper(IdentityWrapper):
+
     def forward(self, x: torch.Tensor, t: torch.Tensor, c: dict, **kwargs) -> torch.Tensor:
-        # cast condition tensors
+        # Cast all cond tensors to the wrapper dtype
         for key in c:
             if isinstance(c[key], torch.Tensor):
                 c[key] = c[key].to(self.dtype)
 
-        # --- I2V conditioning image latent ---
-        concat_images = kwargs.pop("concat_images", None)
+        # --- original "concat" conditioning (if used) ---
+        concat = c.get("concat", None)
+        if concat is not None and concat.numel() > 0:
+            if x.dim() == 4:
+                # [B, C, H, W]
+                x = torch.cat([x, concat.to(x.device, dtype=x.dtype)], dim=1)
+            elif x.dim() == 5:
+                # [B, T, C, H, W]
+                concat = concat.to(x.device, dtype=x.dtype)
+                if concat.dim() == 4:
+                    # [B, C, H, W] -> [B, 1, C, H, W]
+                    concat = concat.unsqueeze(1)
 
+                # Broadcast over time if needed
+                if concat.shape[1] == 1 and x.shape[1] > 1:
+                    concat = concat.expand(-1, x.shape[1], -1, -1, -1)
+
+                # Concatenate along **channels**, not time
+                print("x:", x.shape, "z:", z.shape)
+                x = torch.cat([x, concat], dim=2)
+            else:
+                raise ValueError("Input tensor must be 4D or 5D")
+
+        # --- new: image-to-video conditioning via concat_images ---
+        concat_images = kwargs.pop("concat_images", None)
         if concat_images is not None:
             z = concat_images.to(x.device, dtype=x.dtype)
 
-            # Ensure 5D: [B, C, T, H, W]
-            if x.dim() != 5 or z.dim() != 5:
-                raise RuntimeError(f"Expected 5D video tensors but got x:{x.shape}, z:{z.shape}")
+            if z.dim() == 4:
+                # [B, C, H, W] -> [B, 1, C, H, W]
+                z = z.unsqueeze(1)
 
-            # --- THE FIX YOU ASKED ABOUT IS HERE ---
-            # Expand image latent along the time dimension to match x
-            if z.shape[2] != x.shape[2]:
-                if z.shape[2] == 1:
-                    # broadcast image-latent across all T frames
-                    z = z.expand(-1, -1, x.shape[2], -1, -1)
-                else:
-                    raise RuntimeError(
-                        f"Cannot broadcast image-latent T={z.shape[2]} to match latent T={x.shape[2]}"
-                    )
-            # ---------------------------------------
+            if z.dim() != 5:
+                raise ValueError(f"Expected concat_images to be 5D, got {z.shape}")
 
-            # concat on CHANNEL dimension → [B, 32, T, H, W]
-            x = torch.cat([x, z], dim=1)
+            # Broadcast over time: z: [B, 1, C, H, W] -> [B, T, C, H, W]
+            if z.shape[1] == 1 and x.shape[1] > 1:
+                z = z.expand(-1, x.shape[1], -1, -1, -1)
 
-        # call inner DiT
+            # Now shapes should align on B,T,H,W; concat along **channels**
+            x = torch.cat([x, z], dim=2)  # [B, T, C+16, H, W]
+
         return self.diffusion_model(
             x,
             timesteps=t,
