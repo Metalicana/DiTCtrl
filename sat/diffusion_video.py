@@ -228,7 +228,6 @@ class SATVideoDiffusionEngine(nn.Module):
         samples = samples.to(self.dtype)
         return samples
 
-    @torch.no_grad()
     def sample_multi_prompt(
         self,
         cond: List[Dict],
@@ -257,33 +256,9 @@ class SATVideoDiffusionEngine(nn.Module):
         scale = None
         scale_emb = None
 
-        # Manual concat so the transformer always sees 32 channels (I2V)
-        def denoiser(input, sigma, c, **extra):
-            x = input                      # [B, C, T, H', W'] or [B, T, C, H', W']
-            z = concat_images              # your encoded image latent: [B, 16, 1, H', W']
-
-            if z is not None:
-                z = z.to(x.device, dtype=x.dtype)
-
-                # Expand image latent along the time dimension if needed
-                if x.ndim != 5 or z.ndim != 5:
-                    raise RuntimeError(f"Expected 5D tensors, got x:{x.shape}, z:{z.shape}")
-
-                if x.shape[1] in (16, 32):     # layout [B, C, T, H', W']
-                    T = x.shape[2]
-                    if z.shape[2] == 1 and T > 1:
-                        z = z.expand(-1, -1, T, -1, -1)
-                    x = torch.cat([x, z], dim=1)       # -> [B, 32, T, H', W']
-                else:                                 # layout [B, T, C, H', W']
-                    T = x.shape[1]
-                    if z.shape[2] == 1 and T > 1:
-                        z = z.expand(-1, -1, T, -1, -1)
-                    z_t = z.permute(0, 2, 1, 3, 4)     # -> [B, T, 16, H', W']
-                    x = torch.cat([x, z_t], dim=2)     # -> [B, T, 32, H', W']
-
-            # Now call the real denoiser with the 32‑channel input
-            return self.denoiser(self.model, x, sigma, c, **extra)
-
+        denoiser = lambda input, sigma, c, **addtional_model_inputs: self.denoiser(
+            self.model, input, sigma, c, concat_images=concat_images, **addtional_model_inputs
+        )
         
         samples = self.sampler_multi_prompt(denoiser, randn, cond, uc=uc,      
                                 scale=scale, scale_emb=scale_emb, 
@@ -606,7 +581,7 @@ class SATVideoDiffusionEngineI2V(nn.Module):
         self,
         cond: List[Dict],
         uc: Union[List[Dict], None] = None,
-        randn: torch.Tensor=None,
+        randn: torch.Tensor = None,
         tile_size: int = 13,
         overlap_size: int = 8,
         prefix=None,
@@ -614,57 +589,51 @@ class SATVideoDiffusionEngineI2V(nn.Module):
         noised_image=None,
         **kwargs,
     ):
-        
+        # Optional deterministic noise
         if hasattr(self, "seeded_noise"):
             randn = self.seeded_noise(randn)
 
+        # Optional prefix for scheduled sampling / reuse
         if prefix is not None:
-            randn = torch.cat([prefix, randn[:, prefix.shape[1] :]], dim=1)
+            randn = torch.cat([prefix, randn[:, prefix.shape[1]:]], dim=1)
 
-        # broadcast noise
+        # Broadcast noise across model-parallel ranks if needed
         mp_size = mpu.get_model_parallel_world_size()
         if mp_size > 1:
             global_rank = torch.distributed.get_rank() // mp_size
             src = global_rank * mp_size
-            torch.distributed.broadcast(randn, src=src, group=mpu.get_model_parallel_group())
+            torch.distributed.broadcast(
+                randn, src=src, group=mpu.get_model_parallel_group()
+            )
 
         scale = None
         scale_emb = None
 
-        # Manual concat so the transformer always sees 32 channels (I2V)
+        # IMPORTANT: do *not* change `input` here.
+        # Pass the image latents via kwargs, like in sample_single.
         def denoiser(input, sigma, c, **extra):
-            x = input
-            z = concat_images
-            if z is not None:
-                z = z.to(x.device, dtype=x.dtype)
+            return self.denoiser(
+                self.model,
+                input,          # 16‑channel latent only
+                sigma,
+                c,
+                concat_images=concat_images,  # I2V conditioning
+                **extra,                      # includes noised_image, etc.
+            )
 
-                # ensure same batch size
-                if z.shape[0] != x.shape[0]:
-                    z = z.repeat(x.shape[0], 1, 1, 1, 1)
+        samples = self.sampler_multi_prompt(
+            denoiser,
+            randn,
+            cond,
+            uc=uc,
+            scale=scale,
+            scale_emb=scale_emb,
+            tile_size=tile_size,
+            overlap_size=overlap_size,
+            noised_image=noised_image,   # forwarded to `denoiser` via **extra
+        )
+        return samples.to(self.dtype)
 
-                if x.ndim != 5 or z.ndim != 5:
-                    raise RuntimeError(f"expected 5D tensors, got x:{x.shape}, z:{z.shape}")
-
-                T = x.shape[2] if x.shape[1] in (16, 32) else x.shape[1]
-                if z.shape[2] == 1 and T > 1:
-                    z = z.expand(-1, -1, T, -1, -1)
-
-                if x.shape[1] in (16, 32):        # [B, C, T, H′, W′]
-                    x = torch.cat([x, z], dim=1)  # [B, 32, T, H′, W′]
-                else:                             # [B, T, C, H′, W′]
-                    z_t = z.permute(0, 2, 1, 3, 4)
-                    x = torch.cat([x, z_t], dim=2)
-
-            return self.denoiser(self.model, x, sigma, c, **extra)
-
-        
-        samples = self.sampler_multi_prompt(denoiser, randn, cond, uc=uc,      
-                                scale=scale, scale_emb=scale_emb, 
-                                tile_size = tile_size,
-                                overlap_size = overlap_size,
-                                noised_image=noised_image)
-        samples = samples.to(self.dtype)
-        return samples
 
     @torch.no_grad()
     def log_conditionings(self, batch: Dict, n: int) -> Dict:
