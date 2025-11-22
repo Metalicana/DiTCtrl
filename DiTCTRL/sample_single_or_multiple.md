@@ -5,7 +5,7 @@ Wrapper function for denoising.
 2. `uc` unconditional conditions
 3. `tile_size`
 4. `overlap_size`
-declares a `denoiser`.
+declares a [[Denoiser]] with lambda keyword
 Calls the [[sampler_single_or_multiple]] function
 
 untouched
