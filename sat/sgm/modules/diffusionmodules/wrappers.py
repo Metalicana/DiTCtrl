@@ -53,28 +53,32 @@ class OpenAIWrapper(IdentityWrapper):
             if isinstance(c[key], torch.Tensor):
                 c[key] = c[key].to(self.dtype)
 
-        # get I2V image conditioning if present
+        # --- I2V conditioning image latent ---
         concat_images = kwargs.pop("concat_images", None)
 
         if concat_images is not None:
             z = concat_images.to(x.device, dtype=x.dtype)
 
-            # enforce 5D tensors
+            # Ensure 5D: [B, C, T, H, W]
             if x.dim() != 5 or z.dim() != 5:
-                raise RuntimeError(f"Expected 5D video tensors but got x: {x.shape}, z: {z.shape}")
+                raise RuntimeError(f"Expected 5D video tensors but got x:{x.shape}, z:{z.shape}")
 
-            # ALWAYS broadcast concatenation image to full T
+            # --- THE FIX YOU ASKED ABOUT IS HERE ---
+            # Expand image latent along the time dimension to match x
             if z.shape[2] != x.shape[2]:
                 if z.shape[2] == 1:
+                    # broadcast image-latent across all T frames
                     z = z.expand(-1, -1, x.shape[2], -1, -1)
                 else:
                     raise RuntimeError(
-                        f"Cannot match time dims: x.T={x.shape[2]} vs z.T={z.shape[2]}"
+                        f"Cannot broadcast image-latent T={z.shape[2]} to match latent T={x.shape[2]}"
                     )
+            # ---------------------------------------
 
-            # Concatenate to form 32 channels
+            # concat on CHANNEL dimension → [B, 32, T, H, W]
             x = torch.cat([x, z], dim=1)
 
+        # call inner DiT
         return self.diffusion_model(
             x,
             timesteps=t,
@@ -83,4 +87,11 @@ class OpenAIWrapper(IdentityWrapper):
             **kwargs,
         )
 
+    def switch_adaln_layer(self, mixin_class_name):
+        if hasattr(self.diffusion_model, 'switch_adaln_layer'):
+            self.diffusion_model.switch_adaln_layer(mixin_class_name)
+        else:
+            raise AttributeError(
+                f"The diffusion model does not have a method named 'switch_adaln_layer'"
+            )
 
