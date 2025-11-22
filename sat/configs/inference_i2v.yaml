@@ -13,7 +13,7 @@ args:
 
   output_dir: outputs/multi_prompt_case
   adaln_mixin_names:  # Choose our KV-sharing
-    - 'KVSharingAdaLNMixin'
+    - 'KVSharingI2VAdaLNMixin'
     # - 'KVSharingMaskGuidedAdaLNMixin'    # If you want to use mask-guided KV-sharing, please notice the threshold/token_idx carefully
 
   is_edit: False

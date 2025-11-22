@@ -1575,7 +1575,281 @@ class KVSharingAdaLNMixin(BaseMixin):
     def after_total_layers(self):
         pass    
 
+##########################
+class KVSharingI2VAdaLNMixin(BaseMixin):
+    def __init__(
+        self,
+        width,
+        height,
+        hidden_size,
+        num_layers,
+        time_embed_dim,
+        compressed_num_frames,
+        text_length,
+        qk_ln=True,
+        hidden_size_head=None,
+        elementwise_affine=True,
+        start_step=2,
+        start_layer=5,
+        layer_idx=None,
+        step_idx=None,
+        overlap_size=6,
+        sampling_num_frames=13,
+        end_step=50,        
+        end_layer=30,      
+        mask_save_dir=None,
+        ref_token_idx=None,
+        cur_token_idx=None,
+        attn_map_step_idx=None,
+        attn_map_layer_idx=None,
+        thres=0.1,
+        num_prompts=None,
+        num_transition_blocks=None,
+        longer_mid_segment=None,
+        is_edit=False,
+        reweight_token_idx=None,
+        reweight_scale=-5,
+    ):
+        super().__init__()
+        print("KVSharingI2VAdaLNMixin Init")
+        self.num_layers = num_layers
+        self.width = width
+        self.height = height
+        self.compressed_num_frames = compressed_num_frames
+        self.text_length = text_length
+        
+        self.adaLN_modulations = nn.ModuleList(
+            [nn.Sequential(nn.SiLU(), nn.Linear(time_embed_dim, 12 * hidden_size)) for _ in range(num_layers)]
+        )
 
+        self.qk_ln = qk_ln
+        if qk_ln:
+            self.query_layernorm_list = nn.ModuleList(
+                [
+                    LayerNorm(hidden_size_head, eps=1e-6, elementwise_affine=elementwise_affine)
+                    for _ in range(num_layers)
+                ]
+            )
+            self.key_layernorm_list = nn.ModuleList(
+                [
+                    LayerNorm(hidden_size_head, eps=1e-6, elementwise_affine=elementwise_affine)
+                    for _ in range(num_layers)
+                ]
+            )
+        self.is_edit = is_edit
+        self.reweight_token_idx = reweight_token_idx
+        self.reweight_scale = reweight_scale
+        self.num_prompts = num_prompts
+        self.num_transition_blocks = num_transition_blocks
+        self.longer_mid_segment = longer_mid_segment
+        self.count_segment = 0
+
+        self.cur_step = 0
+        self.cur_layer = 0
+
+        self.end_step = end_step
+        self.end_layer = end_layer
+        self.start_step = start_step
+        self.start_layer = start_layer
+        self.layer_idx = layer_idx if layer_idx is not None else list(range(start_layer, self.end_layer))
+        self.step_idx = step_idx if step_idx is not None else list(range(start_step, end_step))
+        self.overlap_size = overlap_size
+        self.sampling_num_frames = sampling_num_frames
+        
+    def layer_forward(
+        self,
+        hidden_states,
+        mask,
+        *args,
+        **kwargs,
+    ):
+        text_length = kwargs["text_length"]
+        # hidden_states (b,(n_t+t*n_i),d)
+        text_hidden_states = hidden_states[:, :text_length]  # (b,n,d)
+        img_hidden_states = hidden_states[:, text_length:]  # (b,(t n),d)
+        layer = self.transformer.layers[kwargs["layer_id"]]
+        adaLN_modulation = self.adaLN_modulations[kwargs["layer_id"]]
+
+        (
+            shift_msa,
+            scale_msa,
+            gate_msa,
+            shift_mlp,
+            scale_mlp,
+            gate_mlp,
+            text_shift_msa,
+            text_scale_msa,
+            text_gate_msa,
+            text_shift_mlp,
+            text_scale_mlp,
+            text_gate_mlp,
+        ) = adaLN_modulation(kwargs["emb"]).chunk(12, dim=1)
+        gate_msa, gate_mlp, text_gate_msa, text_gate_mlp = (
+            gate_msa.unsqueeze(1),
+            gate_mlp.unsqueeze(1),
+            text_gate_msa.unsqueeze(1),
+            text_gate_mlp.unsqueeze(1),
+        )
+
+        # self full attention (b,(t n),d)
+        img_attention_input = layer.input_layernorm(img_hidden_states)
+        text_attention_input = layer.input_layernorm(text_hidden_states)
+        img_attention_input = modulate(img_attention_input, shift_msa, scale_msa)
+        text_attention_input = modulate(text_attention_input, text_shift_msa, text_scale_msa)
+        
+        # text_attention_input[-1] = text_attention_input[-1] + 0.2
+
+        attention_input = torch.cat((text_attention_input, img_attention_input), dim=1)  # (b,n_t+t*n_i,d)
+        attention_output = layer.attention(attention_input, mask, **kwargs)
+        text_attention_output = attention_output[:, :text_length]  # (b,n,d)
+        img_attention_output = attention_output[:, text_length:]  # (b,(t n),d)
+
+        if self.transformer.layernorm_order == "sandwich":
+            text_attention_output = layer.third_layernorm(text_attention_output)
+            img_attention_output = layer.third_layernorm(img_attention_output)
+        img_hidden_states = img_hidden_states + gate_msa * img_attention_output  # (b,(t n),d)
+        # text_gate_msa = text_gate_msa + 4
+        text_hidden_states = text_hidden_states + text_gate_msa * text_attention_output  # (b,n,d)
+
+        # mlp (b,(t n),d)
+        img_mlp_input = layer.post_attention_layernorm(img_hidden_states)  # vision (b,(t n),d)
+        text_mlp_input = layer.post_attention_layernorm(text_hidden_states)  # language (b,n,d)
+        img_mlp_input = modulate(img_mlp_input, shift_mlp, scale_mlp)
+        text_mlp_input = modulate(text_mlp_input, text_shift_mlp, text_scale_mlp)
+        mlp_input = torch.cat((text_mlp_input, img_mlp_input), dim=1)  # (b,(n_t+t*n_i),d
+        mlp_output = layer.mlp(mlp_input, **kwargs)
+        img_mlp_output = mlp_output[:, text_length:]  # vision (b,(t n),d)
+        text_mlp_output = mlp_output[:, :text_length]  # language (b,n,d)
+        if self.transformer.layernorm_order == "sandwich":
+            text_mlp_output = layer.fourth_layernorm(text_mlp_output)
+            img_mlp_output = layer.fourth_layernorm(img_mlp_output)
+        # PAY ATTENTION TODO
+        img_hidden_states = img_hidden_states + gate_mlp * img_mlp_output  # vision (b,(t n),d)
+        text_hidden_states = text_hidden_states + text_gate_mlp * text_mlp_output  # language (b,n,d)
+
+        hidden_states = torch.cat((text_hidden_states, img_hidden_states), dim=1)  # (b,(n_t+t*n_i),d)
+
+        self.cur_layer += 1
+        if self.cur_layer == self.num_layers:
+            self.cur_layer = 0
+            if self.is_edit:  # ever step, we just use two segments
+                self.cur_step += 1
+            else:  # every step, we use very long segments
+                self.count_segment += 1
+                # if self.count_segment == 2 * (self.num_prompts - 1) :    #previous version
+                total_segments = self.num_prompts + self.num_transition_blocks * (self.num_prompts - 1) + self.longer_mid_segment * (self.num_prompts - 2)
+                # Every calculation, we use two segments, and stride=1. when equals, we reachs the last segment combination of one step
+                if self.count_segment == total_segments - 1: 
+                    self.count_segment = 0
+                    self.cur_step += 1
+            self.after_total_layers()
+
+        return hidden_states
+
+    def reinit(self, parent_model=None):
+        self.cur_step = 0
+        self.cur_layer = 0
+        for layer in self.adaLN_modulations:
+            nn.init.constant_(layer[-1].weight, 0)
+            nn.init.constant_(layer[-1].bias, 0)
+
+    @non_conflict 
+    def attention_fn(
+        self,
+        query_layer,
+        key_layer,
+        value_layer,
+        attention_mask,
+        attention_dropout=None,
+        log_attention_weights=None,
+        scaling_attention_score=True,
+        old_impl=attention_fn_default,
+        **kwargs,
+    ):
+        if self.qk_ln:
+            query_layernorm = self.query_layernorm_list[kwargs["layer_id"]]
+            key_layernorm = self.key_layernorm_list[kwargs["layer_id"]]
+            query_layer = query_layernorm(query_layer)
+            key_layer = key_layernorm(key_layer)
+
+        if self.cur_step in self.step_idx and self.cur_layer in self.layer_idx:
+            B = query_layer.shape[0]
+
+            if B == 2:
+                # I2V case: only unconditional + conditional
+                qu_s, qc_s = query_layer.chunk(2)
+                qu_t, qc_t = qu_s, qc_s          # duplicate to fake slow/fast branches
+
+                ku_s, kc_s = key_layer.chunk(2)
+                ku_t, kc_t = ku_s, kc_s
+
+                vu_s, vc_s = value_layer.chunk(2)
+                vu_t, vc_t = vu_s, vc_s
+
+            elif B == 4:
+                # T2V case: the original DiTCtrl behaviour
+                qu_s, qu_t, qc_s, qc_t = query_layer.chunk(4)
+                ku_s, ku_t, kc_s, kc_t = key_layer.chunk(4)
+                vu_s, vu_t, vc_s, vc_t = value_layer.chunk(4)
+            else:
+                raise RuntimeError(f"Unsupported batch size {B} for KV‑Sharing.")
+
+            print("KV-sharing active:", self.cur_step, self.cur_layer)
+
+            # source branch
+            out_u_s = old_impl(qu_s, ku_s, vu_s, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs)
+            out_c_s = old_impl(qc_s, kc_s, vc_s, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs)
+            # target branch
+            #TODO KEY VALUES USED FROM SOURCE TO TARGET
+            out_u_t = self.attn_batch(qu_t, ku_s, vu_s, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs)
+            out_c_t = self.attn_batch(qc_t, kc_s, vc_s, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs)
+            
+            if B == 2:
+                # produce only 2 branches
+                out_u = torch.stack([out_u_s, out_u_t], dim=0).mean(dim=0)
+                out_c = torch.stack([out_c_s, out_c_t], dim=0).mean(dim=0)
+                return torch.cat([out_u.unsqueeze(0), out_c.unsqueeze(0)], dim=0)
+
+            else:
+                # original T2V behavior: return 4 batches
+                return torch.cat([out_u_s, out_u_t, out_c_s, out_c_t], dim=0)
+            
+            
+        return old_impl(
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            attention_dropout=attention_dropout,
+            log_attention_weights=log_attention_weights,
+            scaling_attention_score=scaling_attention_score,
+            **kwargs,
+        )
+
+    
+    def attn_batch(self, q, k, v, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs):
+        
+        # Ensure the input tensors are contiguous
+        q = q.contiguous()
+        k = k.contiguous()
+        v = v.contiguous()
+        
+        dropout_p = 0. if attention_dropout is None or not attention_dropout.training else attention_dropout.p
+        '''Pure Version Will result in OOM error, as mentioned in the SwissArmyTransformer Link:
+         https://github.com/THUDM/SwissArmyTransformer/blob/b68c4460b9fa2b5312be49a1da152986c6351262/sat/transformer_defaults.py#L60'''
+        # Use PyTorch's scaled_dot_product_attention, now attention_mask is of boolean type
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v, 
+            attn_mask=None,
+            dropout_p=dropout_p,
+            is_causal=False
+        )
+
+        return attn_output
+    
+    def after_total_layers(self):
+        pass    
+##########################
 
 class KVSharingMaskGuidedAdaLNMixin(BaseMixin):
     def __init__(

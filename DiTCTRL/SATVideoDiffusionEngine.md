@@ -27,7 +27,17 @@ An NN Module.
 	6. `conditioner`
 	7. `loss_fn`
 	
-## Methods
-1. [[sample_single_or_multiple]]
+#### Methods
+1. `disable_untrainable_params`
+2. `_init_first_stage`
+3. `forward`
+4. `shared_step`
+5. `get_input`
+6. `decode_first_stage`
+7. `encode_first_stage`
+8. [[sample_single_or_multiple]]
+9. `log_conditionings`
+10. `log_video`
+#### `disable_untrainable_params`
 
 processing
