@@ -477,19 +477,11 @@ class SATVideoDiffusionEngineI2V(nn.Module):
             param.requires_grad = False
         self.first_stage_model = model
 
-    def forward(self, x, sigma, c, concat_images=None, **extra):
-        if concat_images is not None:
-            z = concat_images.to(x.device, dtype=x.dtype)
-
-            # expand T dimension if needed
-            if z.shape[2] == 1 and x.shape[2] > 1:
-                z = z.expand(-1, -1, x.shape[2], -1, -1)
-
-            # concatenate on channel axis (always 16 latent + 16 image = 32)
-            x = torch.cat([x, z], dim=1)
-
-        return self.diffusion_model(x, sigma, c, **extra)
-
+    def forward(self, x, batch):
+        loss = self.loss_fn(self.model, self.denoiser, self.conditioner, x, batch)
+        loss_mean = loss.mean()
+        loss_dict = {"loss": loss_mean}
+        return loss_mean, loss_dict
 
     def shared_step(self, batch: Dict) -> Any:
         x = self.get_input(batch)

@@ -20,28 +20,71 @@ class IdentityWrapper(nn.Module):
         return self.diffusion_model(*args, **kwargs)
 
 
+# class OpenAIWrapper(IdentityWrapper):
+#     def forward(self, x: torch.Tensor, t: torch.Tensor, c: dict, **kwargs) -> torch.Tensor:
+#         for key in c:
+#             c[key] = c[key].to(self.dtype)
+
+#         if x.dim() == 4:
+#             x = torch.cat((x, c.get("concat", torch.Tensor([]).type_as(x))), dim=1)
+#         elif x.dim() == 5:
+#             x = torch.cat((x, c.get("concat", torch.Tensor([]).type_as(x))), dim=2)
+#         else:
+#             raise ValueError("Input tensor must be 4D or 5D")
+
+#         return self.diffusion_model(
+#             x,
+#             timesteps=t,
+#             context=c.get("crossattn", None),
+#             y=c.get("vector", None),
+#             **kwargs,
+#         )
+
+#     def switch_adaln_layer(self, mixin_class_name):
+#         if hasattr(self.diffusion_model, 'switch_adaln_layer'):
+#             self.diffusion_model.switch_adaln_layer(mixin_class_name)
+#         else:
+#             raise AttributeError(f"The diffusion model does not have a method named 'switch_adaln_layer'")
+
 class OpenAIWrapper(IdentityWrapper):
     def forward(self, x: torch.Tensor, t: torch.Tensor, c: dict, **kwargs) -> torch.Tensor:
+        # cast condition tensors
         for key in c:
-            c[key] = c[key].to(self.dtype)
+            if isinstance(c[key], torch.Tensor):
+                c[key] = c[key].to(self.dtype)
 
-        if x.dim() == 4:
-            x = torch.cat((x, c.get("concat", torch.Tensor([]).type_as(x))), dim=1)
-        elif x.dim() == 5:
-            x = torch.cat((x, c.get("concat", torch.Tensor([]).type_as(x))), dim=2)
-        else:
-            raise ValueError("Input tensor must be 4D or 5D")
+        # get I2V image conditioning if present
+        concat_images = kwargs.pop("concat_images", None)
 
+        # if provided, concat image-latent with video latent (I2V)
+        if concat_images is not None:
+            z = concat_images.to(x.device, dtype=x.dtype)
+
+            # ensure 5D tensors: [B, C, T, H, W]
+            if x.dim() != 5 or z.dim() != 5:
+                raise RuntimeError(f"Expected 5D tensors, got x:{x.shape}, z:{z.shape}")
+
+            # expand single-frame image latent along time
+            if z.shape[2] == 1 and x.shape[2] > 1:
+                z = z.expand(-1, -1, x.shape[2], -1, -1)
+
+            # concat on channel axis → 32 channels for I2V
+            x = torch.cat([x, z], dim=1)
+
+        # pass into diffusion transformer
         return self.diffusion_model(
             x,
             timesteps=t,
             context=c.get("crossattn", None),
             y=c.get("vector", None),
-            **kwargs,
+            **kwargs
         )
 
     def switch_adaln_layer(self, mixin_class_name):
         if hasattr(self.diffusion_model, 'switch_adaln_layer'):
             self.diffusion_model.switch_adaln_layer(mixin_class_name)
         else:
-            raise AttributeError(f"The diffusion model does not have a method named 'switch_adaln_layer'")
+            raise AttributeError(
+                f"The diffusion model does not have a method named 'switch_adaln_layer'"
+            )
+
