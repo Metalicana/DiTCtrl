@@ -45,4 +45,7 @@ it loads model from config. Then disables training. makes all parameter requires
 
 #### `forward`
 It calculates loss, by invoking self.loss_fn with modell, denoiser, conditioner, x, and batch. Here what this x is, is important.
+
+#### `shared_step`
+
 processing

@@ -88,6 +88,21 @@ class OpenAII2VWrapper(IdentityWrapper):
 
             B, Tx, Cx, Hx, Wx = x.shape
             Bz, Tz, Cz, Hz, Wz = z.shape
+            # --- match temporal dim Tz -> Tx ---
+
+            if Tz != Tx:
+                # temporal center-crop or interpolate
+                if Tz > Tx:
+                    # center crop
+                    start = (Tz - Tx) // 2
+                    z = z[:, start:start+Tx]
+                else:
+                    # upsample temporally (rare)
+                    z = torch.nn.functional.interpolate(
+                        z.permute(0, 2, 3, 4, 1),  # BCHWT -> BCHWT'
+                        size=Tx,
+                        mode="nearest"
+                    ).permute(0, 4, 1, 2, 3)
 
             # --- batch broadcast if needed ---
             if Bz != B:
