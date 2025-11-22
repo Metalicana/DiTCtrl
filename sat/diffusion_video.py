@@ -10,6 +10,7 @@ from torch import nn
 from sgm.modules import UNCONDITIONAL_CONFIG
 from sgm.modules.autoencoding.temporal_ae import VideoDecoder
 from sgm.modules.diffusionmodules.wrappers import OPENAIUNETWRAPPER
+from sgm.modules.diffusionmodules.wrappers import OPENAII2VUNETWRAPPER
 from sgm.util import (
     default,
     disabled_train,
@@ -420,7 +421,7 @@ class SATVideoDiffusionEngineI2V(nn.Module):
 
         network_config["params"]["dtype"] = dtype_str
         model = instantiate_from_config(network_config)
-        self.model = get_obj_from_str(default(network_wrapper, OPENAIUNETWRAPPER))(
+        self.model = get_obj_from_str(default(network_wrapper, OPENAII2VUNETWRAPPER))(
             model, compile_model=compile_model, dtype=dtype
         )
 
