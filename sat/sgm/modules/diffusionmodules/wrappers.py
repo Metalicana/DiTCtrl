@@ -61,19 +61,27 @@ class OpenAIWrapper(IdentityWrapper):
                 # [B, C, H, W]
                 x = torch.cat([x, concat.to(x.device, dtype=x.dtype)], dim=1)
             elif x.dim() == 5:
-                # [B, T, C, H, W]
-                concat = concat.to(x.device, dtype=x.dtype)
-                if concat.dim() == 4:
-                    # [B, C, H, W] -> [B, 1, C, H, W]
-                    concat = concat.unsqueeze(1)
+                # x: [B,T,C,H,W]
+                z = c.get("concat", None)
+                if z is not None:
+                    z = z.to(x.device, dtype=x.dtype)
 
-                # Broadcast over time if needed
-                if concat.shape[1] == 1 and x.shape[1] > 1:
-                    concat = concat.expand(-1, x.shape[1], -1, -1, -1)
+                    # ensure z is 5D [B,T,C,H,W]
+                    if z.dim() == 4:
+                        z = z.unsqueeze(1)   # [B,1,C,H,W]
 
-                # Concatenate along **channels**, not time
-                print("x:", x.shape, "z:", z.shape)
-                x = torch.cat([x, concat], dim=2)
+                    # broadcast z across time if needed
+                    if z.shape[1] != x.shape[1]:
+                        if z.shape[1] == 1:
+                            z = z.expand(-1, x.shape[1], -1, -1, -1)
+                        else:
+                            raise RuntimeError(
+                                f"Cannot broadcast z T={z.shape[1]} to x T={x.shape[1]}"
+                            )
+
+                    # concat ALONG CHANNELS → dim=2
+                    x = torch.cat([x, z], dim=2)
+
             else:
                 raise ValueError("Input tensor must be 4D or 5D")
 
