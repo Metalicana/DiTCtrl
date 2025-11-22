@@ -425,18 +425,20 @@ def sampling_main(args, model_cls):
 
         images = [load_and_preprocess_image(path, image_size) for path in images_paths]
 
-        # ✅ 1. keep only the first image (I2V uses one conditioning frame)
-        img = images[0]             # shape [3, H, W]
+        # === correct I2V image encoding ===
+        img = images[0].to(device)               # [1,3,H,W]
+        images_tensor = img.unsqueeze(2)         # [1,3,1,H,W]
 
-        # ✅ 2. make a batch dimension
-        # images_tensor = img.unsqueeze(0)   # [1, 3, H, W]
+        T = args.sampling_num_frames             # e.g., 13
+        images_tensor = images_tensor.repeat(1, 1, T, 1, 1)   # [1,3,13,H,W]
 
-        # ✅ 3. add the temporal dimension for the 3D‑VAE
-        images_tensor = img.unsqueeze(2)   # [1, 3, 1, H, W]
-
-        # ✅ 4. move to device and encode with the 3D‑VAE
-        images_tensor = images_tensor.to(device)
         img_latent = model.first_stage_model.encode(images_tensor)
+
+        # ensure 5D
+        if img_latent.dim() == 4:
+            img_latent = img_latent.unsqueeze(2)  # [1,16,1,H',W']
+
+        # now wrapper will expand to [1,16,T',H',W']
 
 
         model.to(device)

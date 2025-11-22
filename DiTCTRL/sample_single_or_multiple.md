@@ -20,4 +20,7 @@ Calls the [[sampler_single_or_multiple]] function
 9. `sample_multi_prompt`
 10. `log_conditionings`
 11. `log_video`
-untouched
+
+#### `disable_untrainable_params`
+
+processing
