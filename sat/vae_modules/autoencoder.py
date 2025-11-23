@@ -614,31 +614,40 @@ class VideoAutoencoderInferenceWrapper(VideoAutoencodingEngine):
             return z, reg_log
         return z
     @torch.no_grad()
-    def encode_raw(
-        self,
-        x: torch.Tensor,
-        input_cp: bool = False,
-        output_cp: bool = False,
-    ) -> torch.Tensor:
+    def encode_raw(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Get the *unregularized* encoder output (pre DiagonalGaussianRegularizer).
-        Shape: [B, C_enc, T', H', W'] where C_enc = 2*z_channels if double_z else z_channels.
+        Return 16-channel pre-compression latent for I2V conditioning.
+        Bypasses conv_out and DiagonalGaussianRegularizer.
         """
-        if self.cp_size > 0 and not input_cp:
-            if not is_context_parallel_initialized():
-                initialize_context_parallel(self.cp_size)
+        enc = self.encoder  # ContextParallelEncoder3D
 
-            global_src_rank = get_context_parallel_group_rank() * self.cp_size
-            torch.distributed.broadcast(x, src=global_src_rank, group=get_context_parallel_group())
-            x = _conv_split(x, dim=2, kernel_size=1)
+        # forward through everything up to but NOT including conv_out
+        h = enc.conv_in(x)
+        for i, down in enumerate(enc.down):
+            for block in down.block:
+                h = block(h)
+            if hasattr(down, "attn") and down.attn is not None:
+                h = down.attn(h)
+            if i != len(enc.down) - 1:
+                h = down.downsample(h)
 
-        # This bypasses DiagonalGaussianRegularizer by setting unregularized=True
-        z, _ = super().encode(x, return_reg_log=True, unregularized=True)
+        if hasattr(enc, "mid"):
+            h = enc.mid(h)
 
-        if self.cp_size > 0 and not output_cp:
-            z = _conv_gather(z, dim=2, kernel_size=1)
-        print(f'WORST ENCODER OF ALL TIME: {z.shape}')
-        return z
+        # apply the final norm and nonlinearity, but skip conv_out
+        if hasattr(enc, "norm_out"):
+            h = enc.norm_out(h)
+        if hasattr(torch.nn.functional, "silu"):
+            h = torch.nn.functional.silu(h)
+        elif hasattr(torch.nn.functional, "swish"):
+            h = torch.nn.functional.swish(h)
+
+        # take the first 16 channels – CogVideoX expects 16
+        if h.shape[1] > 16:
+            h = h[:, :16]
+
+        return h
+
     def decode(
         self,
         z: torch.Tensor,
