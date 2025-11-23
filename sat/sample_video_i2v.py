@@ -161,11 +161,12 @@ def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total, img_la
     load_checkpoint(model, args)
     model.to(device)
     model.eval()
-    
+    noised_image = img_latent
     samples_z = sample_func(
         c_total,
         uc=uc_total,
         concat_images=img_latent,
+        noised_image=noised_image,
         randn=randn_noise,
         tile_size = tile_size,
         overlap_size = overlap_size,
@@ -433,7 +434,7 @@ def sampling_main(args, model_cls):
         images_tensor = images_tensor.repeat(1, 1, T, 1, 1)   # [1,3,13,H,W]
 
         img_latent = model.first_stage_model.encode(images_tensor)
-
+        
         # ensure 5D
         if img_latent.dim() == 4:
             img_latent = img_latent.unsqueeze(2)  # [1,16,1,H',W']
