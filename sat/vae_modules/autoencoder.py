@@ -616,37 +616,34 @@ class VideoAutoencoderInferenceWrapper(VideoAutoencodingEngine):
     @torch.no_grad()
     def encode_raw(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Return 16-channel pre-compression latent for I2V conditioning.
-        Bypasses conv_out and DiagonalGaussianRegularizer.
+        Return full 16-channel latent before compression.
+        Bypasses DiagonalGaussianRegularizer and conv_out.
         """
-        enc = self.encoder  # ContextParallelEncoder3D
+        enc = self.encoder
+        temb = None  # encoder normally builds temb only if time conditioning is used
 
-        # forward through everything up to but NOT including conv_out
         h = enc.conv_in(x)
         for i, down in enumerate(enc.down):
             for block in down.block:
-                h = block(h)
+                h = block(h, temb)      # ← pass temb
             if hasattr(down, "attn") and down.attn is not None:
                 h = down.attn(h)
             if i != len(enc.down) - 1:
                 h = down.downsample(h)
 
         if hasattr(enc, "mid"):
-            h = enc.mid(h)
+            h = enc.mid(h, temb)        # ← some versions also expect temb
 
-        # apply the final norm and nonlinearity, but skip conv_out
         if hasattr(enc, "norm_out"):
             h = enc.norm_out(h)
-        if hasattr(torch.nn.functional, "silu"):
-            h = torch.nn.functional.silu(h)
-        elif hasattr(torch.nn.functional, "swish"):
-            h = torch.nn.functional.swish(h)
+        h = torch.nn.functional.silu(h)
 
         # take the first 16 channels – CogVideoX expects 16
         if h.shape[1] > 16:
             h = h[:, :16]
 
         return h
+
 
     def decode(
         self,
