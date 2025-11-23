@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import math
 from packaging import version
 
 OPENAIUNETWRAPPER = "sgm.modules.diffusionmodules.wrappers.OpenAIWrapper"
@@ -88,29 +89,35 @@ class OpenAII2VWrapper(IdentityWrapper):
 
             B, Tx, Cx, Hx, Wx = x.shape
             Bz, Tz, Cz, Hz, Wz = z.shape
-            # --- match temporal dim Tz -> Tx ---
 
+            # --- coarse temporal alignment: Tz -> Tx ---
             if Tz != Tx:
                 # temporal center-crop or interpolate
                 if Tz > Tx:
                     # center crop
                     start = (Tz - Tx) // 2
-                    z = z[:, start:start+Tx]
+                    z = z[:, start:start + Tx]
                 else:
                     # upsample temporally (rare)
                     z = torch.nn.functional.interpolate(
-                        z.permute(0, 2, 3, 4, 1),  # BCHWT -> BCHWT'
+                        z.permute(0, 2, 3, 4, 1),  # [B,T,C,H,W] -> [B,C,H,W,T]
                         size=Tx,
                         mode="nearest"
-                    ).permute(0, 4, 1, 2, 3)
+                    ).permute(0, 4, 1, 2, 3)     # back to [B,T,C,H,W]
 
-            # --- batch broadcast if needed ---
+            # *** critical: refresh shape after temporal ops ***
+            Bz, Tz, Cz, Hz, Wz = z.shape
+
+            # --- batch broadcast if needed (only batch dim changes) ---
             if Bz != B:
                 if Bz == 1:
                     z = z.expand(B, Tz, Cz, Hz, Wz)
                     Bz = B
                 else:
-                    raise RuntimeError(f"Cannot broadcast concat_images batch Bz={Bz} to B={B}")
+                    raise RuntimeError(
+                        f"Cannot broadcast concat_images batch Bz={Bz} to B={B}"
+                    )
+
 
             # --- spatial sanity check (you can relax this if you want) ---
             if (Hz != Hx) or (Wz != Wx):
