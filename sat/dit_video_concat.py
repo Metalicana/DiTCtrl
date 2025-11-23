@@ -743,6 +743,7 @@ class Rotary3DPositionEmbeddingMixin(BaseMixin):
         **kwargs,
     ):
         attention_fn_default = HOOKS_DEFAULT["attention_fn"]
+        print(f"[{self.__class__.__name__}] input:", query_layer.dim(), query_layer.shape)
 
         query_layer[:, :, self.text_length :] = self.rotary(query_layer[:, :, self.text_length :])
         key_layer[:, :, self.text_length :] = self.rotary(key_layer[:, :, self.text_length :])
@@ -1046,6 +1047,8 @@ class BaseAdaLNMixin(BaseMixin):
         old_impl=attention_fn_default,
         **kwargs,
     ):
+        print(f"[{self.__class__.__name__}] input:", query_layer.dim(), query_layer.shape)
+
         if self.qk_ln:
             query_layernorm = self.query_layernorm_list[kwargs["layer_id"]]
             key_layernorm = self.key_layernorm_list[kwargs["layer_id"]]
@@ -1253,6 +1256,8 @@ class VisualizeAdaLNMixin(BaseMixin):
         old_impl=attention_fn_default,
         **kwargs,
     ):
+        print(f"[{self.__class__.__name__}] input:", query_layer.dim(), query_layer.shape)
+
         if self.qk_ln:
             query_layernorm = self.query_layernorm_list[kwargs["layer_id"]]
             key_layernorm = self.key_layernorm_list[kwargs["layer_id"]]
@@ -1517,6 +1522,8 @@ class KVSharingAdaLNMixin(BaseMixin):
         old_impl=attention_fn_default,
         **kwargs,
     ):
+        print(f"[{self.__class__.__name__}] input:", query_layer.dim(), query_layer.shape)
+
         if self.qk_ln:
             query_layernorm = self.query_layernorm_list[kwargs["layer_id"]]
             key_layernorm = self.key_layernorm_list[kwargs["layer_id"]]
@@ -1766,6 +1773,8 @@ class KVSharingI2VAdaLNMixin(BaseMixin):
         old_impl=attention_fn_default,
         **kwargs,
     ):
+        print(f"[{self.__class__.__name__}] input:", query_layer.dim(), query_layer.shape)
+
         if self.qk_ln:
             query_layernorm = self.query_layernorm_list[kwargs["layer_id"]]
             key_layernorm = self.key_layernorm_list[kwargs["layer_id"]]
@@ -2054,6 +2063,8 @@ class KVSharingMaskGuidedAdaLNMixin(BaseMixin):
         old_impl=attention_fn_default,
         **kwargs,
     ):
+        print(f"[{self.__class__.__name__}] input:", query_layer.dim(), query_layer.shape)
+
         if self.qk_ln:
             query_layernorm = self.query_layernorm_list[kwargs["layer_id"]]
             key_layernorm = self.key_layernorm_list[kwargs["layer_id"]]
@@ -2418,6 +2429,8 @@ class ReWeightAdaLNMixin(BaseMixin):
         old_impl=attention_fn_default,
         **kwargs,
     ):
+        print(f"[{self.__class__.__name__}] input:", query_layer.dim(), query_layer.shape)
+
         if self.qk_ln:
             query_layernorm = self.query_layernorm_list[kwargs["layer_id"]]
             key_layernorm = self.key_layernorm_list[kwargs["layer_id"]]
