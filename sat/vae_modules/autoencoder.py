@@ -614,19 +614,30 @@ class VideoAutoencoderInferenceWrapper(VideoAutoencodingEngine):
             return z, reg_log
         return z
     @torch.no_grad()
-    def encode_raw(self, x: torch.Tensor) -> torch.Tensor:
+    def encode_raw(
+        self,
+        x: torch.Tensor,
+        input_cp: bool = False,
+        output_cp: bool = False,
+    ) -> torch.Tensor:
         """
-        Returns the unregularized, pre-temporal-pooled latent directly from
-        the 3D encoder. Useful for I2V conditioning where we need 16 full channels.
+        Get the *unregularized* encoder output (pre DiagonalGaussianRegularizer).
+        Shape: [B, C_enc, T', H', W'] where C_enc = 2*z_channels if double_z else z_channels.
         """
-        encoder = self.encoder  # ContextParallelEncoder3D instance
-        h = encoder.conv_in(x)
-        for down in encoder.down:
-            h = down(h)
-        h = encoder.mid(h)
+        if self.cp_size > 0 and not input_cp:
+            if not is_context_parallel_initialized():
+                initialize_context_parallel(self.cp_size)
 
-        # keep only the mean half of the double_z channels
-        z = h[:, : encoder.z_channels, ...]  # [B, 16, T', H', W']
+            global_src_rank = get_context_parallel_group_rank() * self.cp_size
+            torch.distributed.broadcast(x, src=global_src_rank, group=get_context_parallel_group())
+            x = _conv_split(x, dim=2, kernel_size=1)
+
+        # This bypasses DiagonalGaussianRegularizer by setting unregularized=True
+        z, _ = super().encode(x, return_reg_log=True, unregularized=True)
+
+        if self.cp_size > 0 and not output_cp:
+            z = _conv_gather(z, dim=2, kernel_size=1)
+
         return z
     def decode(
         self,
