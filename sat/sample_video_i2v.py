@@ -433,13 +433,23 @@ def sampling_main(args, model_cls):
         T = args.sampling_num_frames             # e.g., 13
         images_tensor = images_tensor.repeat(1, 1, T, 1, 1)   # [1,3,13,H,W]
 
-        img_latent = model.first_stage_model.encode_raw(images_tensor)
-        
-        # ensure 5D
-        if img_latent.dim() == 4:
-            img_latent = img_latent.unsqueeze(2)  # [1,16,1,H',W']
+        img_latent = model.first_stage_model.encode(images_tensor)
+        print("img_latent before repeat:", img_latent.shape)
 
-        # now wrapper will expand to [1,16,T',H',W']
+        # ensure 5D shape
+        if img_latent.dim() == 4:
+            img_latent = img_latent.unsqueeze(2)
+
+        # repeat 4→16 channels if needed
+        if img_latent.shape[2] < 16:
+            repeat_factor = 16 // img_latent.shape[2]
+            img_latent = img_latent.repeat(1, 1, repeat_factor, 1, 1)
+
+        print("img_latent after repeat:", img_latent.shape)
+
+        # permute for wrapper [B,T,C,H,W]
+        img_latent = img_latent.permute(0, 2, 1, 3, 4).contiguous()
+
 
 
         model.to(device)
