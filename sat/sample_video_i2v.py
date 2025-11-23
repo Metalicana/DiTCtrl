@@ -161,7 +161,6 @@ def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total, img_la
     load_checkpoint(model, args)
     model.to(device)
     model.eval()
-    pdb.set_trace()
     noised_image = img_latent
     samples_z = sample_func(
         c_total,
