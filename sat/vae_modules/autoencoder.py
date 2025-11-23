@@ -613,7 +613,21 @@ class VideoAutoencoderInferenceWrapper(VideoAutoencodingEngine):
         if return_reg_log:
             return z, reg_log
         return z
+    @torch.no_grad()
+    def encode_raw(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Returns the unregularized, pre-temporal-pooled latent directly from
+        the 3D encoder. Useful for I2V conditioning where we need 16 full channels.
+        """
+        encoder = self.encoder  # ContextParallelEncoder3D instance
+        h = encoder.conv_in(x)
+        for down in encoder.down:
+            h = down(h)
+        h = encoder.mid(h)
 
+        # keep only the mean half of the double_z channels
+        z = h[:, : encoder.z_channels, ...]  # [B, 16, T', H', W']
+        return z
     def decode(
         self,
         z: torch.Tensor,

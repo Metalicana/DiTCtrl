@@ -434,7 +434,7 @@ def sampling_main(args, model_cls):
         T = args.sampling_num_frames             # e.g., 13
         images_tensor = images_tensor.repeat(1, 1, T, 1, 1)   # [1,3,13,H,W]
 
-        img_latent = model.first_stage_model.encode(images_tensor)
+        img_latent = model.first_stage_model.encode_raw(images_tensor)
         
         # ensure 5D
         if img_latent.dim() == 4:
