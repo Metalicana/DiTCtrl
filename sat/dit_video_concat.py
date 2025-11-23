@@ -1805,10 +1805,12 @@ class KVSharingI2VAdaLNMixin(BaseMixin):
             out_c_t = self.attn_batch(qc_t, kc_s, vc_s, attention_mask, attention_dropout, log_attention_weights, scaling_attention_score, **kwargs)
             
             if B == 2:
-                # produce only 2 branches
-                out_u = torch.stack([out_u_s, out_u_t], dim=0).mean(dim=0)
-                out_c = torch.stack([out_c_s, out_c_t], dim=0).mean(dim=0)
-                return torch.cat([out_u.unsqueeze(0), out_c.unsqueeze(0)], dim=0)
+                # I2V: only uc + cond; keep shape [2, n_heads, seq, head_dim]
+                out_u = torch.stack([out_u_s, out_u_t], dim=0).mean(dim=0)  # [1, N, S, D]
+                out_c = torch.stack([out_c_s, out_c_t], dim=0).mean(dim=0)  # [1, N, S, D]
+
+                # concatenate along batch dimension (no extra unsqueeze)
+                return torch.cat([out_u, out_c], dim=0)  # [2, N, S, D]
 
             else:
                 # original T2V behavior: return 4 batches
