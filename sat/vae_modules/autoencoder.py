@@ -637,7 +637,7 @@ class VideoAutoencoderInferenceWrapper(VideoAutoencodingEngine):
 
         if self.cp_size > 0 and not output_cp:
             z = _conv_gather(z, dim=2, kernel_size=1)
-
+        print(f'WORST ENCODER OF ALL TIME: {z.shape}')
         return z
     def decode(
         self,
