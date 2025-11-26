@@ -9,6 +9,6 @@ declares a [[Denoiser]] with lambda keyword
 Calls the [[sampler_single_or_multiple]] function
 
 
+Also, it does model parallelism.
 
-
-processing
+Understood

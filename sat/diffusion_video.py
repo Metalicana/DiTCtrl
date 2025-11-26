@@ -131,7 +131,7 @@ class SATVideoDiffusionEngine(nn.Module):
         self.first_stage_model = model
 
     def forward(self, x, batch):
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         loss = self.loss_fn(self.model, self.denoiser, self.conditioner, x, batch)
         loss_mean = loss.mean()
         loss_dict = {"loss": loss_mean}

@@ -421,36 +421,64 @@ def sampling_main(args, model_cls):
 
     with torch.no_grad():
         prompts = args.prompts
-        images_paths = args.input_image
+        # images_paths = args.input_image
 
+
+        # images = [load_and_preprocess_image(path, image_size) for path in images_paths]
+
+        # # === correct I2V image encoding ===
+        # img = images[0].to(device)               # [1,3,H,W]
+        # images_tensor = img.unsqueeze(2)         # [1,3,1,H,W]
+
+        # T = args.sampling_num_frames             # e.g., 13
+        # images_tensor = images_tensor.repeat(1, 1, T, 1, 1)   # [1,3,13,H,W]
+
+        # img_latent = model.first_stage_model.encode(images_tensor)
+        # print("img_latent before repeat:", img_latent.shape)
+
+        # # ensure 5D shape
+        # if img_latent.dim() == 4:
+        #     img_latent = img_latent.unsqueeze(2)
+
+        # # repeat 4→16 channels if needed
+        # if img_latent.shape[2] < 16:
+        #     repeat_factor = 16 // img_latent.shape[2]
+        #     img_latent = img_latent.repeat(1, 1, repeat_factor, 1, 1)
+
+        # print("img_latent after repeat:", img_latent.shape)
+
+        # # permute for wrapper [B,T,C,H,W]
+        # img_latent = img_latent.permute(0, 2, 1, 3, 4).contiguous()
 
         images = [load_and_preprocess_image(path, image_size) for path in images_paths]
 
-        # === correct I2V image encoding ===
+        # Just use the first image as the conditioning frame
         img = images[0].to(device)               # [1,3,H,W]
-        images_tensor = img.unsqueeze(2)         # [1,3,1,H,W]
 
-        T = args.sampling_num_frames             # e.g., 13
-        images_tensor = images_tensor.repeat(1, 1, T, 1, 1)   # [1,3,13,H,W]
+        # Encode as a single-frame video through the 3D VAE
+        img_5d = img.unsqueeze(2)                # [1,3,1,H,W]
+        img_latent = model.first_stage_model.encode(img_5d)  # [1,C,T_lat,H',W'] or [1,C,H',W']
 
-        img_latent = model.first_stage_model.encode(images_tensor)
-        print("img_latent before repeat:", img_latent.shape)
-
-        # ensure 5D shape
         if img_latent.dim() == 4:
-            img_latent = img_latent.unsqueeze(2)
+            # Some VAEs might drop the temporal dim if T=1
+            img_latent = img_latent.unsqueeze(2)  # [1,C,1,H',W']
 
-        # repeat 4→16 channels if needed
-        if img_latent.shape[2] < 16:
-            repeat_factor = 16 // img_latent.shape[2]
-            img_latent = img_latent.repeat(1, 1, repeat_factor, 1, 1)
+        B, C_lat, T_lat, H_lat, W_lat = img_latent.shape
 
-        print("img_latent after repeat:", img_latent.shape)
+        # How many compressed frames does the DiT expect? In your code you were
+        # manually repeating to 16, so we'll use 16 here as well.
+        T_model = 16
 
-        # permute for wrapper [B,T,C,H,W]
-        img_latent = img_latent.permute(0, 2, 1, 3, 4).contiguous()
+        # Allocate zeros for all compressed frames
+        cond_latent = torch.zeros(
+            B, C_lat, T_model, H_lat, W_lat, device=img_latent.device, dtype=img_latent.dtype
+        )
 
+        # Copy the encoded first frame into time index 0 only
+        cond_latent[:, :, 0] = img_latent[:, :, 0]
 
+        # Final shape for the wrapper: [B, T_model, C_lat, H', W']
+        img_latent = cond_latent.permute(0, 2, 1, 3, 4).contiguous()
 
         model.to(device)
         set_random_seed(args.seed)

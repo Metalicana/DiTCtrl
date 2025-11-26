@@ -53,4 +53,4 @@ Set text parts of foreground and background mask to 0.
 
 
 set foreground masks's text parts to full
-Processing
+Understood

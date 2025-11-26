@@ -14,4 +14,6 @@
 	Printing infos only.
 The more specific implementation of this is [[VideoDDIMSampler]]
 
-Processing
+Understood.
+Implementations:
+1. [[VideoDDIMSampler]]
