@@ -421,7 +421,7 @@ def sampling_main(args, model_cls):
 
     with torch.no_grad():
         prompts = args.prompts
-        # images_paths = args.input_image
+        images_paths = args.input_image
 
 
         # images = [load_and_preprocess_image(path, image_size) for path in images_paths]

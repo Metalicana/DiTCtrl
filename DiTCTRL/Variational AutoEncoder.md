@@ -60,4 +60,9 @@ if instead of entirely doing it, we let the probability itself sample x, so the 
 $$
 D_{KL}(P||Q) =  \sum P(x)*\frac{1}{2}log(\frac{P(x)}{Q(x)})^2
 $$
-Important intuition here, squaring means, despite having low variance, it is highly biased. Meaning, if two distributions 
+Important intuition here, squaring means, despite having low variance, it is highly biased. Meaning, if two distributions are quite close to each other, then estimation is good.
+
+To make it low bias and low variance, we add a term that is actually 0.
+$$
+D^{'}_{KL}(P||Q) = \frac{1}{N} \sum{[log \frac{P(x)}{Q(x)} + \lambda (r(x) - E_{x~P}[r(x)])]}
+$$
