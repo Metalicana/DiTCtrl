@@ -156,7 +156,7 @@ def process_multi_prompt_video_with_adaln(model, args, c_total, uc_total, img_la
                        C, H, W, F, 
                        randn_noise):  
     set_random_seed(args.seed)
-    # pdb.set_trace()
+    pdb.set_trace()
     model.switch_adaln_layer(adaln_name)
     load_checkpoint(model, args)
     model.to(device)
@@ -449,7 +449,7 @@ def sampling_main(args, model_cls):
 
         # # permute for wrapper [B,T,C,H,W]
         # img_latent = img_latent.permute(0, 2, 1, 3, 4).contiguous()
-
+        pdb.set_trace()
         images = [load_and_preprocess_image(path, image_size) for path in images_paths]
 
         # Just use the first image as the conditioning frame

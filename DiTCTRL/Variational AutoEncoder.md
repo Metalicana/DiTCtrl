@@ -12,7 +12,7 @@ For each probability, multiplying with the value itself gives the expected value
 For example, expected value of a dice throw is the value $1*1/6 + 2*1/6 + 3*1/6 4*1/6 5*1/6 + 6*1/6 = 3.5$ 
 
 ## Chain Rule Of Probability
-$p(x, y) = p(x | y)p(y)$
+$$p(x, y) = p(x | y)p(y)$$
 Let's say x is wind speed, and y is rain amount in mm.
 then $p(x, y)$ is probability of windspeed x and rain y mm.
 Which is equal to, probability of x given y has happened times probability of y happening.
@@ -66,3 +66,36 @@ To make it low bias and low variance, we add a term that is actually 0.
 $$
 D^{'}_{KL}(P||Q) = \frac{1}{N} \sum{[log \frac{P(x)}{Q(x)} + \lambda (r(x) - E_{x~P}[r(x)])]}
 $$
+
+Some more explanation needed but lets's move to the VAE
+
+## Variational AutoEncoder
+
+If we have a latent variable z, and our main target distribution is x, then what we really need is, 
+$p(x) = \int p(x, z)dz$ , which is basically, p(x) is sum of all the probability of x and z.
+x can remain constant, and entire z needs to be considered for that particular x lmao.
+
+What about, $$p(x) = \frac{p(x, z)}{p(z|x)}$$
+But $p(z|x)$ is also not learned. Like, that is the forward process, where we wanna know the latent given x.
+
+We need approximation,
+$$p_{\theta}(z|x) \approx q_{\phi}(z|x) $$
+Meaning, we are trying to get close to a distribution.
+Now time for some fun math:
+$$log (p_{\theta}(x)) = log (p_{\theta}(x))$$
+$$= log (p_{\theta}(x)) \int q_{\phi}(z|x)dz$$
+We can do this because, this is just the summation of all possibilities of z occurring given x, which is 1. Then we can bring the outer term inside too, because it is constant relative to the integral.
+$$= \int log (p_{\theta}(x))  q_{\phi}(z|x)dz$$
+Interestingly, this is like saying sum over all the probabilities, with the weight $log(p_{\theta}(x)$, so we basically can rewrite it as expectation:
+$$
+E_{q_{\phi}(z|x)}[log(p_{\theta}(x))]
+$$
+Which is:
+$$
+E_{q_{\phi}(z|x)}[log\frac{p_{\theta}(x,z)}{p_{\theta}(z|x)}]
+$$
+Now, we multiply and divide by same thing:
+$$
+E_{q_{\phi}(z|x)}[log\frac{p_{\theta}(x,z)q_{\phi}(z|x)}{p_{\theta}(z|x)q_{\phi}(z|x)}]
+$$
+Now we can split it:
