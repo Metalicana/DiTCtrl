@@ -133,6 +133,7 @@ def resize_for_rectangle_crop(arr, image_size, reshape_mode="random"):
 
 
 def process_with_adaln(model, args, c, uc, prompts, cnt, adaln_name, device, sample_func, T, C, H, W, F, randn_noise):
+    import pdb; pdb.set_trace()
     set_random_seed(args.seed)
     model.switch_adaln_layer(adaln_name)
     load_checkpoint(model, args)
